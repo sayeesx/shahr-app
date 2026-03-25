@@ -1,10 +1,18 @@
+// app/(auth)/_layout.tsx
 import { Stack } from 'expo-router';
 
 export default function AuthLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: 'fade',
+        contentStyle: { backgroundColor: '#FEFCFE' },
+      }}
+    >
       <Stack.Screen name="index" />
       <Stack.Screen name="signup" />
+      <Stack.Screen name="forgot-password" />
     </Stack>
   );
 }

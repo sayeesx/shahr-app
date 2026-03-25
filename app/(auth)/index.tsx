@@ -1,210 +1,207 @@
-import React, { useState } from 'react';
+// app/(auth)/index.tsx  — Login Screen
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
-  TextInput,
+  Text,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
-  ActivityIndicator,
+  Animated,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, Shadows } from '../../lib/theme';
-import { ThemedText } from '../../components/ui/ThemedText';
+import { router, useLocalSearchParams } from 'expo-router';
+import { AC, AF, AS, AR } from '../../lib/authTheme';
+import { AuthField } from '../../components/auth/AuthField';
+import { AuthButton } from '../../components/auth/AuthButton';
+import { AuthToast } from '../../components/auth/AuthToast';
 import { signIn } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 
+type Errs = { email?: string; password?: string };
+
+function validate(email: string, password: string): Errs {
+  const e: Errs = {};
+  if (!email) e.email = 'Email is required';
+  else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email address';
+  if (!password) e.password = 'Password is required';
+  else if (password.length < 6) e.password = 'At least 6 characters required';
+  return e;
+}
+
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const params = useLocalSearchParams<{ prefillEmail?: string; successMessage?: string }>();
   const setSession = useAppStore((s) => s.setSession);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
-      return;
+  const [email, setEmail] = useState(params.prefillEmail ?? '');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<Errs>({});
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null);
+
+  const fadeY = useRef(new Animated.Value(24)).current;
+  const fade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 480, useNativeDriver: true }),
+      Animated.spring(fadeY, { toValue: 0, useNativeDriver: true, speed: 12, bounciness: 3 }),
+    ]).start();
+
+    if (params.successMessage) {
+      setToast({ msg: params.successMessage, type: 'success' });
+      const t = setTimeout(() => setToast(null), 4500);
+      return () => clearTimeout(t);
     }
+  }, []);
+
+  const flash = (msg: string, type: 'success' | 'error' | 'warning') => {
+    setToast({ msg, type });
+    if (type !== 'success') setTimeout(() => setToast(null), 3500);
+  };
+
+  const clearErr = (k: keyof Errs) => setErrors((p) => ({ ...p, [k]: undefined }));
+
+  const handleLogin = async () => {
+    const errs = validate(email, password);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
 
     setLoading(true);
     try {
-      const { user, session } = await signIn(email, password);
-      
-      // Save session to store
+      const { user } = await signIn(email, password);
       await setSession({
-        name: user.user_metadata?.name || '',
-        phone: user.user_metadata?.phone || '',
-        email: user.email || '',
+        name: user.user_metadata?.name ?? '',
+        phone: user.user_metadata?.phone ?? '',
+        email: user.email ?? '',
       });
-
-      // Navigate to home
       router.replace('/(main)/new');
-    } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+    } catch (e: any) {
+      flash(e.message || 'Login failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={AC.bg} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={s.kav}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <ThemedText variant="title" color="light" style={styles.title}>
-              Welcome Back
-            </ThemedText>
-            <ThemedText variant="body" color="lightMuted">
-              Sign in to continue your Kerala journey
-            </ThemedText>
-          </View>
+          <Animated.View style={[s.inner, { opacity: fade, transform: [{ translateY: fadeY }] }]}>
 
-          {/* Form */}
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.textLightMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
+            {/* ── Heading ── */}
+            <View style={s.head}>
+              <Text style={[s.greeting, { fontFamily: AF.regular }]}>Welcome back</Text>
+              <Text style={[s.title, { fontFamily: AF.bold }]}>Sign In</Text>
+              <View style={s.accent} />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={Colors.textLightMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+            {/* ── Toast ── */}
+            {toast && (
+              <View style={s.toastWrap}>
+                <AuthToast message={toast.msg} type={toast.type} visible={!!toast} />
+              </View>
+            )}
+
+            {/* ── Fields ── */}
+            <View style={s.form}>
+              <AuthField
+                label="Email address"
+                iconName="mail-outline"
+                value={email}
+                onChangeText={(t) => { setEmail(t); clearErr('email'); }}
+                error={errors.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.textLightMuted}
-                />
+
+              <AuthField
+                label="Password"
+                iconName="lock-closed-outline"
+                value={password}
+                onChangeText={(t) => { setPassword(t); clearErr('password'); }}
+                error={errors.password}
+                isPassword
+              />
+
+              <TouchableOpacity
+                style={s.forgot}
+                onPress={() => router.push('/(auth)/forgot-password')}
+                activeOpacity={0.6}
+              >
+                <Text style={[s.forgotTxt, { fontFamily: AF.semibold }]}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.forgotPassword}>
-              <ThemedText variant="small" color="primary">
-                Forgot Password?
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
+            {/* ── Actions ── */}
+            <View style={s.actions}>
+              <AuthButton label="Sign In" onPress={handleLogin} loading={loading} />
 
-          {/* Buttons */}
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.textPrimary} />
-            ) : (
-              <ThemedText variant="cardTitle" color="primary">
-                Sign In
-              </ThemedText>
-            )}
-          </TouchableOpacity>
+              <View style={s.divRow}>
+                <View style={s.divLine} />
+                <Text style={[s.divTxt, { fontFamily: AF.regular }]}>or</Text>
+                <View style={s.divLine} />
+              </View>
 
-          {/* Sign Up Link */}
-          <View style={styles.signupContainer}>
-            <ThemedText variant="body" color="lightMuted">
-              Don't have an account?
-            </ThemedText>
-            <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-              <ThemedText variant="body" color="primary" style={styles.signupText}>
-                Sign Up
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
+              <View style={s.signupRow}>
+                <Text style={[s.signupLbl, { fontFamily: AF.regular }]}>
+                  Don't have an account?
+                </Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/signup')} activeOpacity={0.6}>
+                  <Text style={[s.signupLink, { fontFamily: AF.semibold }]}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: AC.bg },
+  kav: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: AS.pad, paddingTop: 56, paddingBottom: 48 },
+  inner: { flex: 1 },
+
+  /* heading */
+  head: { marginBottom: 40 },
+  greeting: { fontSize: 15, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6 },
+  title: { fontSize: 36, color: AC.text, letterSpacing: 0.2, lineHeight: 42 },
+  accent: {
+    width: 36, height: 3, borderRadius: 100,
+    backgroundColor: AC.primary, marginTop: 12,
   },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.screenPadding,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 40,
-  },
-  title: {
-    marginBottom: 8,
-  },
-  form: {
-    gap: 16,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.cardDark,
-    borderRadius: Spacing.radiusLarge,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    color: Colors.textLight,
-    fontSize: 16,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-  },
-  loginButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: Spacing.radiusXL,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 32,
-    ...Shadows.button,
-  },
-  loginButtonDisabled: {
-    opacity: 0.7,
-  },
-  signupContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-    gap: 4,
-  },
-  signupText: {
-    fontWeight: '600',
-  },
+
+  toastWrap: { marginBottom: 20 },
+
+  /* form */
+  form: { gap: AS.gap, marginBottom: 4 },
+
+  forgot: { alignSelf: 'flex-end', marginTop: 2 },
+  forgotTxt: { fontSize: 13, color: AC.text, letterSpacing: 0.2 },
+
+  /* actions */
+  actions: { marginTop: 32, gap: 22 },
+
+  divRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  divLine: { flex: 1, height: 1, backgroundColor: AC.borderSubtle },
+  divTxt: { fontSize: 13, color: AC.textMuted, letterSpacing: 0.3 },
+
+  signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  signupLbl: { fontSize: 14, color: AC.textSub },
+  signupLink: { fontSize: 14, color: AC.text, textDecorationLine: 'underline' },
 });

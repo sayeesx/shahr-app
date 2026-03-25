@@ -1,245 +1,275 @@
-import React, { useState } from 'react';
+// app/(auth)/signup.tsx — Sign Up Screen
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
-  TextInput,
+  Text,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
-  ActivityIndicator,
+  Animated,
+  StatusBar,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, Shadows } from '../../lib/theme';
-import { ThemedText } from '../../components/ui/ThemedText';
+import { AC, AF, AS, AR } from '../../lib/authTheme';
+import { AuthField } from '../../components/auth/AuthField';
+import { AuthButton } from '../../components/auth/AuthButton';
+import { AuthToast } from '../../components/auth/AuthToast';
+import { CountryPicker, COUNTRIES, Country } from '../../components/auth/CountryPicker';
 import { signUp } from '../../lib/supabase';
-import { useAppStore } from '../../store/useAppStore';
+
+type Errs = { name?: string; email?: string; phone?: string; password?: string };
+
+function validate(name: string, email: string, password: string): Errs {
+  const e: Errs = {};
+  if (!name.trim()) e.name = 'Full name is required';
+  if (!email) e.email = 'Email is required';
+  else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email address';
+  if (!password) e.password = 'Password is required';
+  else if (password.length < 6) e.password = 'At least 6 characters required';
+  return e;
+}
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
+  const [errors, setErrors] = useState<Errs>({});
   const [loading, setLoading] = useState(false);
-  const setSession = useAppStore((s) => s.setSession);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [phoneFocused, setPhoneFocused] = useState(false);
+
+  const fade = useRef(new Animated.Value(0)).current;
+  const fadeY = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 480, useNativeDriver: true }),
+      Animated.spring(fadeY, { toValue: 0, useNativeDriver: true, speed: 12, bounciness: 3 }),
+    ]).start();
+  }, []);
+
+  const flash = (msg: string, type: 'success' | 'error' | 'warning') => {
+    setToast({ msg, type });
+    if (type !== 'success') setTimeout(() => setToast(null), 3500);
+  };
+
+  const clearErr = (k: keyof Errs) => setErrors((p) => ({ ...p, [k]: undefined }));
 
   const handleSignup = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
-      return;
-    }
+    const errs = validate(name, email, password);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
 
     setLoading(true);
     try {
-      const { user, session } = await signUp(email, password, name, phone);
-      
-      // Save session to store
-      await setSession({
-        name: name,
-        phone: phone,
-        email: email,
-      });
+      const fullPhone = phone ? `${country.dial}${phone}` : '';
+      await signUp(email, password, name, fullPhone);
 
-      Alert.alert(
-        'Account Created',
-        'Your account has been created successfully!',
-        [
-          {
-            text: 'Continue',
-            onPress: () => router.replace('/(main)/new'),
+      // Flash then redirect to login with prefilled email
+      flash('Account created! Redirecting…', 'success');
+      setTimeout(() => {
+        router.replace({
+          pathname: '/(auth)',
+          params: {
+            prefillEmail: email,
+            successMessage: 'Account created successfully. Please sign in.',
           },
-        ]
-      );
-    } catch (error: any) {
-      Alert.alert('Sign Up Failed', error.message);
+        });
+      }, 1400);
+    } catch (e: any) {
+      flash(e.message || 'Sign up failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={AC.bg} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={s.kav}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color={Colors.textLight} />
+          <Animated.View style={[s.inner, { opacity: fade, transform: [{ translateY: fadeY }] }]}>
+
+            {/* ── Back ── */}
+            <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.6}>
+              <Ionicons name="arrow-back" size={20} color={AC.textSub} />
             </TouchableOpacity>
-            <ThemedText variant="title" color="light" style={styles.title}>
-              Create Account
-            </ThemedText>
-            <ThemedText variant="body" color="lightMuted">
-              Join Shahr for your Kerala journey
-            </ThemedText>
-          </View>
 
-          {/* Form */}
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor={Colors.textLightMuted}
-                value={name}
-                onChangeText={setName}
-              />
+            {/* ── Heading ── */}
+            <View style={s.head}>
+              <Text style={[s.greeting, { fontFamily: AF.regular }]}>Join Shahr</Text>
+              <Text style={[s.title, { fontFamily: AF.bold }]}>Create Account</Text>
+              <View style={s.accent} />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="call-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Phone Number (Optional)"
-                placeholderTextColor={Colors.textLightMuted}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.textLightMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={Colors.textLightMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password (min 6 characters)"
-                placeholderTextColor={Colors.textLightMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.textLightMuted}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Sign Up Button */}
-          <TouchableOpacity
-            style={[styles.signupButton, loading && styles.signupButtonDisabled]}
-            onPress={handleSignup}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.textPrimary} />
-            ) : (
-              <ThemedText variant="cardTitle" color="primary">
-                Create Account
-              </ThemedText>
+            {/* ── Toast ── */}
+            {toast && (
+              <View style={s.toastWrap}>
+                <AuthToast message={toast.msg} type={toast.type} visible={!!toast} />
+              </View>
             )}
-          </TouchableOpacity>
 
-          {/* Login Link */}
-          <View style={styles.loginContainer}>
-            <ThemedText variant="body" color="lightMuted">
-              Already have an account?
-            </ThemedText>
-            <TouchableOpacity onPress={() => router.back()}>
-              <ThemedText variant="body" color="primary" style={styles.loginText}>
-                Sign In
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
+            {/* ── Fields ── */}
+            <View style={s.form}>
+              <AuthField
+                label="Full Name"
+                iconName="person-outline"
+                value={name}
+                onChangeText={(t) => { setName(t); clearErr('name'); }}
+                error={errors.name}
+                autoCorrect={false}
+              />
+
+              <AuthField
+                label="Email address"
+                iconName="mail-outline"
+                value={email}
+                onChangeText={(t) => { setEmail(t); clearErr('email'); }}
+                error={errors.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {/* ── Phone with country picker ── */}
+              <View style={s.phoneOuter}>
+                <Animated.View
+                  style={[
+                    s.phoneField,
+                    {
+                      borderColor: errors.phone
+                        ? AC.error
+                        : phoneFocused
+                          ? AC.border
+                          : AC.borderSubtle,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="call-outline"
+                    size={17}
+                    color={phoneFocused ? AC.primary : AC.textMuted}
+                    style={s.phoneIcon}
+                  />
+                  <CountryPicker selected={country} onSelect={setCountry} />
+                  <TextInput
+                    style={[s.phoneInput, { fontFamily: AF.regular }]}
+                    placeholder="Phone (optional)"
+                    placeholderTextColor={AC.textMuted}
+                    value={phone}
+                    onChangeText={(t) => { setPhone(t); clearErr('phone'); }}
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => setPhoneFocused(false)}
+                    keyboardType="phone-pad"
+                    selectionColor={AC.primary}
+                  />
+                </Animated.View>
+                {errors.phone ? (
+                  <Text style={[s.phoneErr, { fontFamily: AF.regular }]}>{errors.phone}</Text>
+                ) : null}
+              </View>
+
+              <AuthField
+                label="Password (min 6 characters)"
+                iconName="lock-closed-outline"
+                value={password}
+                onChangeText={(t) => { setPassword(t); clearErr('password'); }}
+                error={errors.password}
+                isPassword
+              />
+            </View>
+
+            {/* ── Actions ── */}
+            <View style={s.actions}>
+              <AuthButton label="Create Account" onPress={handleSignup} loading={loading} />
+
+              <View style={s.loginRow}>
+                <Text style={[s.loginLbl, { fontFamily: AF.regular }]}>
+                  Already have an account?
+                </Text>
+                <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6}>
+                  <Text style={[s.loginLink, { fontFamily: AF.semibold }]}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ── Terms ── */}
+            <Text style={[s.terms, { fontFamily: AF.regular }]}>
+              By creating an account you agree to our{' '}
+              <Text style={s.termsLink}>Terms</Text>
+              {' '}and{' '}
+              <Text style={s.termsLink}>Privacy Policy</Text>
+            </Text>
+
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.screenPadding,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 40,
-  },
-  backButton: {
-    marginBottom: 16,
-  },
-  title: {
-    marginBottom: 8,
-  },
-  form: {
-    gap: 16,
-  },
-  inputContainer: {
-    flexDirection: 'row',
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: AC.bg },
+  kav: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: AS.pad, paddingTop: 24, paddingBottom: 48 },
+  inner: { flex: 1 },
+
+  backBtn: {
+    width: 40, height: 40,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: AC.borderSubtle,
     alignItems: 'center',
-    backgroundColor: Colors.cardDark,
-    borderRadius: Spacing.radiusLarge,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    color: Colors.textLight,
-    fontSize: 16,
-  },
-  signupButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: Spacing.radiusXL,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 32,
-    ...Shadows.button,
-  },
-  signupButtonDisabled: {
-    opacity: 0.7,
-  },
-  loginContainer: {
-    flexDirection: 'row',
     justifyContent: 'center',
+    marginBottom: 24,
+  },
+
+  head: { marginBottom: 32 },
+  greeting: { fontSize: 15, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6 },
+  title: { fontSize: 36, color: AC.text, letterSpacing: 0.2, lineHeight: 42 },
+  accent: {
+    width: 36, height: 3, borderRadius: 100,
+    backgroundColor: AC.primary, marginTop: 12,
+  },
+
+  toastWrap: { marginBottom: 18 },
+
+  form: { gap: AS.gap, marginBottom: 4 },
+
+  /* Phone field */
+  phoneOuter: { width: '100%' },
+  phoneField: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 24,
-    gap: 4,
+    backgroundColor: AC.bg,
+    borderRadius: AR.field,
+    borderWidth: 1.5,
+    height: AS.fieldHeight,
+    paddingHorizontal: 20,
   },
-  loginText: {
-    fontWeight: '600',
-  },
+  phoneIcon: { marginRight: 10 },
+  phoneInput: { flex: 1, color: AC.text, fontSize: 15, letterSpacing: 0.2 },
+  phoneErr: { color: AC.error, fontSize: 11.5, marginTop: 5, marginLeft: 22, letterSpacing: 0.1 },
+
+  actions: { marginTop: 32, gap: 22 },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  loginLbl: { fontSize: 14, color: AC.textSub },
+  loginLink: { fontSize: 14, color: AC.text, textDecorationLine: 'underline' },
+
+  terms: { textAlign: 'center', fontSize: 12, color: AC.textMuted, lineHeight: 18, marginTop: 28 },
+  termsLink: { color: AC.text, textDecorationLine: 'underline' },
 });
