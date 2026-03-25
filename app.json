@@ -44,8 +44,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9b921828-77e5-44c0-a3ec-3e372ac2e13b"
+        "projectId": "b22da0b4-67a4-4f94-ba75-61f63106b063"
       }
-    }
+    },
+    "owner": "sayees"
   }
 }

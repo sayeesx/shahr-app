@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { useAppStore } from '../store/useAppStore';
 import { View, ActivityIndicator } from 'react-native';
+import { Colors } from '../lib/theme';
 
 export default function Index() {
   const session = useAppStore((s) => s.session);
@@ -8,15 +9,15 @@ export default function Index() {
 
   if (!sessionLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0D3B5C' }}>
-        <ActivityIndicator color="#ECC94B" size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator color={Colors.primary} size="large" />
       </View>
     );
   }
 
   if (session) {
-    return <Redirect href="/(dashboard)" />;
+    return <Redirect href="/(main)/new" />;
   }
 
-  return <Redirect href="/(main)" />;
+  return <Redirect href="/(auth)" />;
 }
