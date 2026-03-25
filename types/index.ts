@@ -163,7 +163,15 @@ export interface DashboardData {
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 export interface UserSession {
-  name: string;
-  phone: string;
-  email: string;
+  user?: {
+    id: string;
+    email?: string;
+    user_metadata?: {
+      name?: string;
+      phone?: string;
+    };
+  };
+  name?: string;
+  phone?: string;
+  email?: string;
 }

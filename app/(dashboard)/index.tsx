@@ -47,7 +47,7 @@ export default function DashboardScreen() {
               Welcome back
             </Text>
             <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800' }}>
-              {session.name.split(' ')[0]}
+              {session?.user?.user_metadata?.name?.split(' ')[0] ?? 'Guest'}
             </Text>
           </View>
           <TouchableOpacity

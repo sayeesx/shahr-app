@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Shadows } from '../../lib/theme';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { FloatingNav } from '../../components/ui/FloatingNav';
+import { AnimatedNotificationBell } from '../../components/ui/AnimatedNotification';
 import { PressableScale } from '../../components/ui/PressableScale';
 
 const { width } = Dimensions.get('window');
@@ -125,6 +126,7 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
+          <View style={styles.contentWrapper}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -135,10 +137,7 @@ export default function HomeScreen() {
                 Plan Your Journey
               </ThemedText>
             </View>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons name="notifications-outline" size={24} color={Colors.textPrimary} />
-              <View style={styles.notificationBadge} />
-            </TouchableOpacity>
+            <AnimatedNotificationBell onPress={() => {}} />
           </View>
 
           {/* Action Grid */}
@@ -182,6 +181,7 @@ export default function HomeScreen() {
           </ScrollView>
 
           {/* Bottom padding for nav */}
+          </View>
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
@@ -200,8 +200,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.screenPadding,
     paddingTop: 20,
+  },
+  contentWrapper: {
+    paddingHorizontal: Spacing.screenPadding,
   },
 
   // Header
@@ -216,23 +218,6 @@ const styles = StyleSheet.create({
   },
   mainTitle: {
     marginTop: 4,
-  },
-  notificationButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.error,
   },
 
   // Action Grid

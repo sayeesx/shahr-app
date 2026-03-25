@@ -4,6 +4,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,25 +12,50 @@ import { router } from 'expo-router';
 import { Colors, Spacing, Shadows } from '../../lib/theme';
 import { ThemedText } from '../../components/ui/ThemedText';
 import { FloatingNav } from '../../components/ui/FloatingNav';
+import { PressableScale } from '../../components/ui/PressableScale';
+import { useAppStore } from '../../store/useAppStore';
+import { signOut } from '../../lib/supabase';
 
 const MENU_ITEMS = [
-  { id: 'trips', label: 'My Trips', icon: 'briefcase-outline', route: '/(main)/bookings' },
-  { id: 'saved', label: 'Saved Places', icon: 'heart-outline', route: '/(main)/explore' },
-  { id: 'payments', label: 'Payment Methods', icon: 'card-outline', route: null },
-  { id: 'settings', label: 'Settings', icon: 'settings-outline', route: null },
-  { id: 'help', label: 'Help & Support', icon: 'help-circle-outline', route: '/(main)/chat' },
-  { id: 'logout', label: 'Logout', icon: 'log-out-outline', route: null },
+  { id: 'trips', label: 'My Trips', icon: 'briefcase-outline', color: Colors.primary, route: '/(main)/bookings' },
+  { id: 'saved', label: 'Saved Places', icon: 'heart-outline', color: '#FF6B6B', route: '/(main)/explore' },
+  { id: 'payments', label: 'Payment Methods', icon: 'card-outline', color: '#4ECDC4', route: null },
+  { id: 'settings', label: 'Settings', icon: 'settings-outline', color: '#95A5A6', route: null },
+  { id: 'help', label: 'Help & Support', icon: 'help-circle-outline', color: '#3498DB', route: '/(main)/chat' },
 ];
 
 export default function ProfileScreen() {
+  const clearSession = useAppStore((s) => s.clearSession);
+  const session = useAppStore((s) => s.session);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      clearSession();
+      router.replace('/(auth)' as any);
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    }
+  };
+
+  const handleMenuPress = (item: typeof MENU_ITEMS[0]) => {
+    if (item.route) {
+      router.push(item.route as any);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <ThemedText variant="title" color="light">
+          <ThemedText variant="title" color="primary">
             Profile
           </ThemedText>
+          <TouchableOpacity style={styles.settingsBtn}>
+            <Ionicons name="settings-outline" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -38,82 +64,83 @@ export default function ProfileScreen() {
         >
           {/* Profile Card */}
           <View style={styles.profileCard}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={40} color={Colors.textLight} />
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={36} color={Colors.textLight} />
+              </View>
+              <TouchableOpacity style={styles.editAvatarBtn}>
+                <Ionicons name="camera" size={14} color={Colors.textLight} />
+              </TouchableOpacity>
             </View>
             <View style={styles.profileInfo}>
               <ThemedText variant="section" color="primary">
-                Guest User
+                {session?.user?.user_metadata?.name || 'Vijay'}
               </ThemedText>
-              <ThemedText variant="small" color="muted">
-                guest@example.com
-              </ThemedText>
-            </View>
-            <TouchableOpacity style={styles.editButton}>
-              <Ionicons name="create-outline" size={18} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <ThemedText variant="title" color="light">
-                3
-              </ThemedText>
-              <ThemedText variant="small" color="lightMuted">
-                Trips
-              </ThemedText>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <ThemedText variant="title" color="light">
-                2
-              </ThemedText>
-              <ThemedText variant="small" color="lightMuted">
-                Saved
-              </ThemedText>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <ThemedText variant="title" color="light">
-                5
-              </ThemedText>
-              <ThemedText variant="small" color="lightMuted">
-                Bookings
+              <ThemedText variant="body" color="secondary">
+                {session?.user?.email || 'vijay@example.com'}
               </ThemedText>
             </View>
           </View>
 
-          {/* Menu */}
-          <View style={styles.menuContainer}>
-            {MENU_ITEMS.map((item, index) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.menuItem,
-                  index === MENU_ITEMS.length - 1 && styles.menuItemLast,
-                ]}
-                onPress={() => item.route && router.push(item.route as any)}
-              >
-                <View style={styles.menuLeft}>
-                  <View style={styles.menuIcon}>
-                    <Ionicons
-                      name={item.icon as any}
-                      size={20}
-                      color={item.id === 'logout' ? Colors.error : Colors.textLightMuted}
-                    />
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <PressableScale>
+              <View style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="airplane" size={24} color={Colors.primaryDark} />
+                <ThemedText variant="title" color="primary" style={styles.statNumber}>12</ThemedText>
+                <ThemedText variant="small" color="secondary">Trips</ThemedText>
+              </View>
+            </PressableScale>
+            <PressableScale>
+              <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
+                <Ionicons name="heart" size={24} color="#FF9800" />
+                <ThemedText variant="title" color="primary" style={styles.statNumber}>8</ThemedText>
+                <ThemedText variant="small" color="secondary">Saved</ThemedText>
+              </View>
+            </PressableScale>
+            <PressableScale>
+              <View style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="star" size={24} color="#2196F3" />
+                <ThemedText variant="title" color="primary" style={styles.statNumber}>4.9</ThemedText>
+                <ThemedText variant="small" color="secondary">Rating</ThemedText>
+              </View>
+            </PressableScale>
+          </View>
+
+          {/* Menu Section */}
+          <View style={styles.menuSection}>
+            <ThemedText variant="section" color="primary" style={styles.menuTitle}>
+              Quick Actions
+            </ThemedText>
+            <View style={styles.menuGrid}>
+              {MENU_ITEMS.map((item) => (
+                <PressableScale key={item.id} onPress={() => handleMenuPress(item)}>
+                  <View style={styles.menuItem}>
+                    <View style={[styles.menuIcon, { backgroundColor: `${item.color}20` }]}>
+                      <Ionicons name={item.icon as any} size={22} color={item.color} />
+                    </View>
+                    <ThemedText variant="body" color="primary" style={styles.menuLabel}>
+                      {item.label}
+                    </ThemedText>
+                    <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
                   </View>
-                  <ThemedText
-                    variant="body"
-                    color={item.id === 'logout' ? 'secondary' : 'primary'}
-                  >
-                    {item.label}
-                  </ThemedText>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
-              </TouchableOpacity>
-            ))}
+                </PressableScale>
+              ))}
+            </View>
           </View>
+
+          {/* Logout Button */}
+          <PressableScale onPress={handleLogout}>
+            <View style={styles.logoutButton}>
+              <View style={[styles.menuIcon, { backgroundColor: `${Colors.error}20` }]}>
+                <Ionicons name="log-out-outline" size={22} color={Colors.error} />
+              </View>
+              <ThemedText variant="body" color="secondary" style={styles.logoutText}>
+                Logout
+              </ThemedText>
+              <Ionicons name="chevron-forward" size={18} color={Colors.error} />
+            </View>
+          </PressableScale>
 
           <View style={styles.bottomPadding} />
         </ScrollView>
@@ -133,9 +160,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: Spacing.screenPadding,
     paddingTop: 12,
     paddingBottom: 20,
+  },
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: Spacing.screenPadding,
@@ -143,76 +181,94 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: Spacing.radiusLarge,
-    padding: Spacing.cardPadding,
-    marginBottom: Spacing.cardGap,
-    ...Shadows.card,
+    backgroundColor: Colors.background,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  avatarContainer: {
+    position: 'relative',
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: Spacing.radiusFull,
-    backgroundColor: Colors.cardDark,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  editAvatarBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.background,
   },
   profileInfo: {
     flex: 1,
     marginLeft: 16,
   },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Spacing.radiusFull,
-    backgroundColor: Colors.cardSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statsContainer: {
+  statsRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.cardDark,
-    borderRadius: Spacing.radiusLarge,
-    padding: Spacing.cardPadding,
-    marginBottom: Spacing.sectionGap,
+    gap: 12,
+    marginBottom: 32,
   },
-  statItem: {
+  statCard: {
     flex: 1,
     alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 20,
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.divider,
+  statNumber: {
+    marginTop: 8,
+    marginBottom: 4,
   },
-  menuContainer: {
-    backgroundColor: Colors.card,
-    borderRadius: Spacing.radiusLarge,
-    overflow: 'hidden',
-    ...Shadows.card,
+  menuSection: {
+    marginBottom: 24,
+  },
+  menuTitle: {
+    marginBottom: 16,
+  },
+  menuGrid: {
+    gap: 8,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.cardPadding,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
   },
   menuIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Spacing.radiusMedium,
-    backgroundColor: Colors.cardSecondary,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  menuLabel: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+  },
+  logoutText: {
+    flex: 1,
+    marginLeft: 12,
+    color: Colors.error,
   },
   bottomPadding: {
     height: 100,
