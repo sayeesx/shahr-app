@@ -12,13 +12,14 @@ import { Colors } from '../lib/theme';
 
 export default function RootLayout() {
   const loadSession = useAppStore((s) => s.loadSession);
+  const sessionLoaded = useAppStore((s) => s.sessionLoaded);
   const fontsLoaded = useLoadFonts();
 
   useEffect(() => {
     loadSession();
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !sessionLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
         <ActivityIndicator color={Colors.primary} size="large" />
@@ -34,8 +35,6 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(main)" />
-            <Stack.Screen name="(intake)" />
-            <Stack.Screen name="(dashboard)" />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

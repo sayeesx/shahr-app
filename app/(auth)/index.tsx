@@ -77,11 +77,16 @@ export default function LoginScreen() {
     try {
       const { user } = await signIn(email, password);
       await setSession({
+        user: {
+          id: user.id,
+          email: user.email,
+          user_metadata: user.user_metadata,
+        },
         name: user.user_metadata?.name ?? '',
         phone: user.user_metadata?.phone ?? '',
         email: user.email ?? '',
       });
-      router.replace('/(main)/new');
+      router.replace('/(main)/profile');
     } catch (e: any) {
       const msg = e.message || 'Login failed. Please try again.';
       if (msg.toLowerCase().includes('network')) {

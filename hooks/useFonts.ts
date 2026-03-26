@@ -8,7 +8,7 @@ import {
 } from '@expo-google-fonts/playfair-display';
 
 export function useLoadFonts() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     PlayfairDisplay: PlayfairDisplay_400Regular,
     'PlayfairDisplay-Medium': PlayfairDisplay_500Medium,
     'PlayfairDisplay-SemiBold': PlayfairDisplay_600SemiBold,
@@ -18,10 +18,13 @@ export function useLoadFonts() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    if (fontError) {
+      console.error('Error loading fonts:', fontError);
+    }
     if (fontsLoaded) {
       setIsReady(true);
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
   return isReady;
 }

@@ -13,7 +13,7 @@ interface AuthToastProps {
 }
 
 const CFG: Record<ToastType, { color: string; bg: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
-    success: { color: AC.success, bg: '#F0FBF4', border: 'rgba(58,158,106,0.3)', icon: 'checkmark-circle-outline' },
+    success: { color: '#4CAF50', bg: '#F1FBF1', border: '#4CAF50', icon: 'checkmark-circle-outline' },
     error: { color: AC.error, bg: '#FDF2F2', border: 'rgba(201,64,64,0.3)', icon: 'alert-circle-outline' },
     warning: { color: AC.warning, bg: '#FDF8EE', border: 'rgba(192,122,16,0.3)', icon: 'warning-outline' },
 };
