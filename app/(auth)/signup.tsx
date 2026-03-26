@@ -11,6 +11,7 @@ import {
   Animated,
   StatusBar,
   TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,6 +22,9 @@ import { AuthButton } from '../../components/auth/AuthButton';
 import { AuthToast } from '../../components/auth/AuthToast';
 import { CountryPicker, COUNTRIES, Country } from '../../components/auth/CountryPicker';
 import { signUp } from '../../lib/supabase';
+
+const TERMS_URL = 'https://shahr.app/terms';
+const PRIVACY_URL = 'https://shahr.app/privacy';
 
 type Errs = { name?: string; email?: string; phone?: string; password?: string };
 
@@ -72,7 +76,6 @@ export default function SignupScreen() {
       const fullPhone = phone ? `${country.dial}${phone}` : '';
       await signUp(email, password, name, fullPhone);
 
-      // Flash then redirect to login with prefilled email
       flash('Account created! Redirecting…', 'success');
       setTimeout(() => {
         router.replace({
@@ -84,7 +87,14 @@ export default function SignupScreen() {
         });
       }, 1400);
     } catch (e: any) {
-      flash(e.message || 'Sign up failed. Please try again.', 'error');
+      const msg = e.message || 'Sign up failed. Please try again.';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+        flash('An account with this email already exists.', 'error');
+      } else if (msg.toLowerCase().includes('network')) {
+        flash('Network error. Please check your connection.', 'error');
+      } else {
+        flash(msg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -147,40 +157,15 @@ export default function SignupScreen() {
 
               {/* ── Phone with country picker ── */}
               <View style={s.phoneOuter}>
-                <Animated.View
-                  style={[
-                    s.phoneField,
-                    {
-                      borderColor: errors.phone
-                        ? AC.error
-                        : phoneFocused
-                          ? AC.border
-                          : AC.borderSubtle,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="call-outline"
-                    size={17}
-                    color={phoneFocused ? AC.primary : AC.textMuted}
-                    style={s.phoneIcon}
-                  />
-                  <CountryPicker selected={country} onSelect={setCountry} />
-                  <TextInput
-                    style={[s.phoneInput, { fontFamily: AF.regular }]}
-                    placeholder="Phone (optional)"
-                    placeholderTextColor={AC.textMuted}
-                    value={phone}
-                    onChangeText={(t) => { setPhone(t); clearErr('phone'); }}
-                    onFocus={() => setPhoneFocused(true)}
-                    onBlur={() => setPhoneFocused(false)}
-                    keyboardType="phone-pad"
-                    selectionColor={AC.primary}
-                  />
-                </Animated.View>
-                {errors.phone ? (
-                  <Text style={[s.phoneErr, { fontFamily: AF.regular }]}>{errors.phone}</Text>
-                ) : null}
+                <AnimatedPhoneField
+                  phone={phone}
+                  setPhone={(t) => { setPhone(t); clearErr('phone'); }}
+                  country={country}
+                  setCountry={setCountry}
+                  phoneFocused={phoneFocused}
+                  setPhoneFocused={setPhoneFocused}
+                  error={errors.phone}
+                />
               </View>
 
               <AuthField
@@ -202,23 +187,85 @@ export default function SignupScreen() {
                   Already have an account?
                 </Text>
                 <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6}>
-                  <Text style={[s.loginLink, { fontFamily: AF.semibold }]}>Sign In</Text>
+                  <View style={s.linkUnderline}>
+                    <Text style={[s.loginLink, { fontFamily: AF.semibold }]}>Sign In</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* ── Terms ── */}
-            <Text style={[s.terms, { fontFamily: AF.regular }]}>
-              By creating an account you agree to our{' '}
-              <Text style={s.termsLink}>Terms</Text>
-              {' '}and{' '}
-              <Text style={s.termsLink}>Privacy Policy</Text>
-            </Text>
+            <View style={s.termsRow}>
+              <Text style={[s.terms, { fontFamily: AF.regular }]}>By creating an account you agree to our </Text>
+              <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)} activeOpacity={0.6}>
+                <View style={s.linkUnderline}>
+                  <Text style={[s.termsLinkTxt, { fontFamily: AF.regular }]}>Terms</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={[s.terms, { fontFamily: AF.regular }]}> and </Text>
+              <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)} activeOpacity={0.6}>
+                <View style={s.linkUnderline}>
+                  <Text style={[s.termsLinkTxt, { fontFamily: AF.regular }]}>Privacy Policy</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
 
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+// ── Phone Field Sub-component ─────────────────────────────────────────────────
+function AnimatedPhoneField({
+  phone, setPhone, country, setCountry, phoneFocused, setPhoneFocused, error,
+}: {
+  phone: string;
+  setPhone: (t: string) => void;
+  country: Country;
+  setCountry: (c: Country) => void;
+  phoneFocused: boolean;
+  setPhoneFocused: (v: boolean) => void;
+  error?: string;
+}) {
+  return (
+    <>
+      <Animated.View
+        style={[
+          s.phoneField,
+          {
+            borderColor: error
+              ? AC.error
+              : phoneFocused
+                ? AC.border
+                : AC.borderSubtle,
+          },
+        ]}
+      >
+        <Ionicons
+          name="call-outline"
+          size={17}
+          color={error ? AC.error : phoneFocused ? AC.primary : AC.textSub}
+          style={s.phoneIcon}
+        />
+        <CountryPicker selected={country} onSelect={setCountry} />
+        <TextInput
+          style={[s.phoneInput, { fontFamily: AF.regular }]}
+          placeholder="Phone (optional)"
+          placeholderTextColor={AC.textMuted}
+          value={phone}
+          onChangeText={setPhone}
+          onFocus={() => setPhoneFocused(true)}
+          onBlur={() => setPhoneFocused(false)}
+          keyboardType="phone-pad"
+          selectionColor={AC.primary}
+        />
+      </Animated.View>
+      {error ? (
+        <Text style={[s.phoneErr, { fontFamily: AF.regular }]}>{error}</Text>
+      ) : null}
+    </>
   );
 }
 
@@ -239,7 +286,7 @@ const s = StyleSheet.create({
   },
 
   head: { marginBottom: 32 },
-  greeting: { fontSize: 15, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6 },
+  greeting: { fontSize: 16, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6, lineHeight: 22 },
   title: { fontSize: 36, color: AC.text, letterSpacing: 0.2, lineHeight: 42 },
   accent: {
     width: 36, height: 3, borderRadius: 100,
@@ -267,9 +314,11 @@ const s = StyleSheet.create({
 
   actions: { marginTop: 32, gap: 22 },
   loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  loginLbl: { fontSize: 14, color: AC.textSub },
-  loginLink: { fontSize: 14, color: AC.text, textDecorationLine: 'underline' },
+  loginLbl: { fontSize: 14, color: AC.textSub, lineHeight: 20 },
+  loginLink: { fontSize: 14, color: AC.primary },
+  linkUnderline: { borderBottomWidth: 1, borderBottomColor: AC.borderSubtle },
 
-  terms: { textAlign: 'center', fontSize: 12, color: AC.textMuted, lineHeight: 18, marginTop: 28 },
-  termsLink: { color: AC.text, textDecorationLine: 'underline' },
+  terms: { fontSize: 12, color: AC.textSub, lineHeight: 18 },
+  termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 28 },
+  termsLinkTxt: { fontSize: 12, color: AC.primary },
 });

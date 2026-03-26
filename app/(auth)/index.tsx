@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,6 +20,9 @@ import { AuthButton } from '../../components/auth/AuthButton';
 import { AuthToast } from '../../components/auth/AuthToast';
 import { signIn } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
+
+const TERMS_URL = 'https://shahr.app/terms';
+const PRIVACY_URL = 'https://shahr.app/privacy';
 
 type Errs = { email?: string; password?: string };
 
@@ -79,7 +83,14 @@ export default function LoginScreen() {
       });
       router.replace('/(main)/new');
     } catch (e: any) {
-      flash(e.message || 'Login failed. Please try again.', 'error');
+      const msg = e.message || 'Login failed. Please try again.';
+      if (msg.toLowerCase().includes('network')) {
+        flash('Network error. Please check your connection.', 'error');
+      } else if (msg.toLowerCase().includes('invalid')) {
+        flash('Invalid email or password.', 'error');
+      } else {
+        flash(msg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -140,7 +151,9 @@ export default function LoginScreen() {
                 onPress={() => router.push('/(auth)/forgot-password')}
                 activeOpacity={0.6}
               >
-                <Text style={[s.forgotTxt, { fontFamily: AF.semibold }]}>Forgot password?</Text>
+                <View style={s.linkUnderline}>
+                  <Text style={[s.forgotTxt, { fontFamily: AF.semibold }]}>Forgot password?</Text>
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -159,9 +172,27 @@ export default function LoginScreen() {
                   Don't have an account?
                 </Text>
                 <TouchableOpacity onPress={() => router.push('/(auth)/signup')} activeOpacity={0.6}>
-                  <Text style={[s.signupLink, { fontFamily: AF.semibold }]}>Sign Up</Text>
+                  <View style={s.linkUnderline}>
+                    <Text style={[s.signupLink, { fontFamily: AF.semibold }]}>Sign Up</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* ── Terms footer ── */}
+            <View style={s.termsRow}>
+              <Text style={[s.terms, { fontFamily: AF.regular }]}>By signing in you agree to our </Text>
+              <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)} activeOpacity={0.6}>
+                <View style={s.linkUnderline}>
+                  <Text style={[s.termsLinkTxt, { fontFamily: AF.regular }]}>Terms</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={[s.terms, { fontFamily: AF.regular }]}> and </Text>
+              <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)} activeOpacity={0.6}>
+                <View style={s.linkUnderline}>
+                  <Text style={[s.termsLinkTxt, { fontFamily: AF.regular }]}>Privacy Policy</Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
           </Animated.View>
@@ -179,7 +210,7 @@ const s = StyleSheet.create({
 
   /* heading */
   head: { marginBottom: 40 },
-  greeting: { fontSize: 15, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6 },
+  greeting: { fontSize: 16, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6, lineHeight: 22 },
   title: { fontSize: 36, color: AC.text, letterSpacing: 0.2, lineHeight: 42 },
   accent: {
     width: 36, height: 3, borderRadius: 100,
@@ -192,16 +223,21 @@ const s = StyleSheet.create({
   form: { gap: AS.gap, marginBottom: 4 },
 
   forgot: { alignSelf: 'flex-end', marginTop: 2 },
-  forgotTxt: { fontSize: 13, color: AC.text, letterSpacing: 0.2 },
+  forgotTxt: { fontSize: 13, color: AC.primary, letterSpacing: 0.2 },
+  linkUnderline: { borderBottomWidth: 1, borderBottomColor: AC.borderSubtle },
 
   /* actions */
   actions: { marginTop: 32, gap: 22 },
 
   divRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   divLine: { flex: 1, height: 1, backgroundColor: AC.borderSubtle },
-  divTxt: { fontSize: 13, color: AC.textMuted, letterSpacing: 0.3 },
+  divTxt: { fontSize: 13, color: AC.textSub, letterSpacing: 0.3 },
 
   signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  signupLbl: { fontSize: 14, color: AC.textSub },
-  signupLink: { fontSize: 14, color: AC.text, textDecorationLine: 'underline' },
+  signupLbl: { fontSize: 14, color: AC.textSub, lineHeight: 20 },
+  signupLink: { fontSize: 14, color: AC.primary },
+
+  terms: { fontSize: 12, color: AC.textSub, lineHeight: 18 },
+  termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 28 },
+  termsLinkTxt: { fontSize: 12, color: AC.primary },
 });

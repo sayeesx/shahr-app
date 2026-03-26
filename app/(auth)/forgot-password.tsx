@@ -1,5 +1,5 @@
-// app/(auth)/forgot-password.tsx — Forgot Password Screen
-import React, { useState, useRef, useEffect } from 'react';
+// app/(auth)/forgot-password.tsx — OTP-based Forgot Password with Email/Phone toggle
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -22,25 +22,44 @@ import { AuthToast } from '../../components/auth/AuthToast';
 import { CountryPicker, COUNTRIES, Country } from '../../components/auth/CountryPicker';
 
 type Method = 'email' | 'phone';
+type Step = 'input' | 'otp' | 'reset';
 
 export default function ForgotPasswordScreen() {
+    // Method toggle
     const [method, setMethod] = useState<Method>('email');
+    const [step, setStep] = useState<Step>('input');
+
+    // Input fields
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [country, setCountry] = useState<Country>(COUNTRIES[0]);
-    const [errors, setErrors] = useState<{ email?: string; phone?: string }>({});
-    const [loading, setLoading] = useState(false);
-    const [sent, setSent] = useState(false);
     const [phoneFocused, setPhoneFocused] = useState(false);
+    const [inputErrors, setInputErrors] = useState<{ email?: string; phone?: string }>({});
+
+    // OTP
+    const [otp, setOtp] = useState(['', '', '', '']);
+    const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null]);
+
+    // Reset password
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordErrors, setPasswordErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
+
+    // Shared
+    const [loading, setLoading] = useState(false);
+    const [btnLabel, setBtnLabel] = useState('Send OTP');
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-    /* Entrance */
+    // Entrance animation
     const fade = useRef(new Animated.Value(0)).current;
     const fadeY = useRef(new Animated.Value(24)).current;
 
-    /* Toggle pill animation */
-    const pillX = useRef(new Animated.Value(0)).current;  // 0 = email side, 1 = phone side
+    // Toggle pill animation
+    const pillX = useRef(new Animated.Value(0)).current;
     const fldFade = useRef(new Animated.Value(1)).current;
+
+    // Step transition
+    const stepFade = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
         Animated.parallel([
@@ -49,10 +68,15 @@ export default function ForgotPasswordScreen() {
         ]).start();
     }, []);
 
+    const flash = useCallback((msg: string, type: 'success' | 'error' | 'warning') => {
+        setToast({ msg, type });
+        if (type !== 'success') setTimeout(() => setToast(null), 3500);
+    }, []);
+
+    // ── Toggle method ───────────────────────────────────────────────────────
     const switchMethod = (next: Method) => {
-        if (next === method) return;
-        setErrors({});
-        // fade out → switch → fade in
+        if (next === method || step !== 'input') return;
+        setInputErrors({});
         Animated.timing(fldFade, { toValue: 0, duration: 110, useNativeDriver: true }).start(() => {
             setMethod(next);
             Animated.parallel([
@@ -64,12 +88,16 @@ export default function ForgotPasswordScreen() {
 
     const pillTranslate = pillX.interpolate({ inputRange: [0, 1], outputRange: ['2%', '50%'] });
 
-    const flash = (msg: string, type: 'success' | 'error' | 'warning') => {
-        setToast({ msg, type });
-        if (type !== 'success') setTimeout(() => setToast(null), 3500);
+    // ── Step transition ─────────────────────────────────────────────────────
+    const goToStep = (nextStep: Step) => {
+        Animated.timing(stepFade, { toValue: 0, duration: 120, useNativeDriver: true }).start(() => {
+            setStep(nextStep);
+            Animated.timing(stepFade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+        });
     };
 
-    const handleReset = async () => {
+    // ── Step 1: Send OTP ────────────────────────────────────────────────────
+    const handleSendOTP = async () => {
         const errs: { email?: string; phone?: string } = {};
         if (method === 'email') {
             if (!email) errs.email = 'Email is required';
@@ -77,20 +105,113 @@ export default function ForgotPasswordScreen() {
         } else {
             if (!phone) errs.phone = 'Phone number is required';
         }
-        setErrors(errs);
+        setInputErrors(errs);
         if (Object.keys(errs).length) return;
 
         setLoading(true);
+        setBtnLabel('Sending…');
         try {
-            // TODO: supabase.auth.resetPasswordForEmail(email) or OTP
-            await new Promise((r) => setTimeout(r, 1400));
-            setSent(true);
+            // TODO: Call your backend to send OTP
+            await new Promise((r) => setTimeout(r, 1200));
+            flash('Verification code sent!', 'success');
+            setTimeout(() => setToast(null), 2000);
+            goToStep('otp');
         } catch (e: any) {
-            flash(e.message || 'Something went wrong. Try again.', 'error');
+            flash(e.message || 'Failed to send OTP. Try again.', 'error');
+        } finally {
+            setLoading(false);
+            setBtnLabel('Send OTP');
+        }
+    };
+
+    // ── Step 2: OTP input ───────────────────────────────────────────────────
+    const handleOtpChange = (text: string, index: number) => {
+        const digit = text.replace(/[^0-9]/g, '').slice(-1);
+        const newOtp = [...otp];
+        newOtp[index] = digit;
+        setOtp(newOtp);
+        if (digit && index < 3) {
+            otpRefs.current[index + 1]?.focus();
+        }
+    };
+
+    const handleOtpKeyPress = (e: any, index: number) => {
+        if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+            const newOtp = [...otp];
+            newOtp[index - 1] = '';
+            setOtp(newOtp);
+            otpRefs.current[index - 1]?.focus();
+        }
+    };
+
+    const handleVerifyOTP = async () => {
+        const code = otp.join('');
+        if (code.length < 4) {
+            flash('Please enter the complete 4-digit code.', 'warning');
+            return;
+        }
+        setLoading(true);
+        try {
+            // TODO: Verify OTP with your backend
+            await new Promise((r) => setTimeout(r, 1000));
+            flash('Code verified!', 'success');
+            setTimeout(() => setToast(null), 1500);
+            goToStep('reset');
+        } catch (e: any) {
+            flash(e.message || 'Invalid code. Please try again.', 'error');
         } finally {
             setLoading(false);
         }
     };
+
+    // ── Step 3: Reset password ──────────────────────────────────────────────
+    const handleResetPassword = async () => {
+        const errs: { newPassword?: string; confirmPassword?: string } = {};
+        if (!newPassword) errs.newPassword = 'Password is required';
+        else if (newPassword.length < 6) errs.newPassword = 'At least 6 characters required';
+        if (!confirmPassword) errs.confirmPassword = 'Please confirm your password';
+        else if (newPassword !== confirmPassword) errs.confirmPassword = 'Passwords do not match';
+        setPasswordErrors(errs);
+        if (Object.keys(errs).length) return;
+
+        setLoading(true);
+        setBtnLabel('Resetting…');
+        try {
+            // TODO: Call your backend to reset the password
+            await new Promise((r) => setTimeout(r, 1200));
+            setBtnLabel('Success');
+            setLoading(false);
+            flash('Password reset successfully!', 'success');
+            setTimeout(() => {
+                router.replace({
+                    pathname: '/(auth)',
+                    params: {
+                        prefillEmail: method === 'email' ? email : '',
+                        successMessage: 'Password reset successfully. Please sign in.',
+                    },
+                });
+            }, 1800);
+        } catch (e: any) {
+            flash(e.message || 'Failed to reset password. Try again.', 'error');
+            setLoading(false);
+            setBtnLabel('Reset Password');
+        }
+    };
+
+    // ── Step info ───────────────────────────────────────────────────────────
+    const stepIndex = step === 'input' ? 0 : step === 'otp' ? 1 : 2;
+    const heading = step === 'input'
+        ? 'Forgot password?'
+        : step === 'otp'
+            ? 'Enter OTP'
+            : 'New Password';
+    const subtitle = step === 'input'
+        ? 'Choose how you\'d like to receive your reset code.'
+        : step === 'otp'
+            ? method === 'email'
+                ? `We sent a 4-digit code to ${email}`
+                : `We sent a 4-digit code to ${country.dial} ${phone}`
+            : 'Choose a new password for your account.';
 
     return (
         <SafeAreaView style={s.safe}>
@@ -107,17 +228,40 @@ export default function ForgotPasswordScreen() {
                     <Animated.View style={[s.inner, { opacity: fade, transform: [{ translateY: fadeY }] }]}>
 
                         {/* ── Back ── */}
-                        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.6}>
+                        <TouchableOpacity
+                            style={s.backBtn}
+                            onPress={() => {
+                                if (step === 'otp') goToStep('input');
+                                else if (step === 'reset') goToStep('otp');
+                                else router.back();
+                            }}
+                            activeOpacity={0.6}
+                        >
                             <Ionicons name="arrow-back" size={20} color={AC.textSub} />
                         </TouchableOpacity>
 
                         {/* ── Heading ── */}
                         <View style={s.head}>
-                            <Text style={[s.greeting, { fontFamily: AF.regular }]}>
-                                {sent ? 'All done' : 'Forgot password?'}
-                            </Text>
+                            <Text style={[s.greeting, { fontFamily: AF.regular }]}>{heading}</Text>
                             <Text style={[s.title, { fontFamily: AF.bold }]}>Reset Password</Text>
                             <View style={s.accent} />
+                        </View>
+
+                        {/* ── Step indicator ── */}
+                        <View style={s.stepRow}>
+                            {[0, 1, 2].map((i) => (
+                                <View
+                                    key={i}
+                                    style={[
+                                        s.stepDot,
+                                        i <= stepIndex && s.stepDotActive,
+                                        i < 2 && s.stepDotGap,
+                                    ]}
+                                />
+                            ))}
+                            <Text style={[s.stepLabel, { fontFamily: AF.regular }]}>
+                                Step {stepIndex + 1} of 3
+                            </Text>
                         </View>
 
                         {/* ── Toast ── */}
@@ -127,118 +271,169 @@ export default function ForgotPasswordScreen() {
                             </View>
                         )}
 
-                        {sent ? (
-                            /* ── Success state ── */
-                            <View style={s.successBox}>
-                                <View style={s.successCircle}>
-                                    <Ionicons name="checkmark" size={36} color={AC.primary} />
-                                </View>
-                                <Text style={[s.successTitle, { fontFamily: AF.semibold }]}>
-                                    {method === 'email' ? 'Check your inbox' : 'Check your messages'}
-                                </Text>
-                                <Text style={[s.successBody, { fontFamily: AF.regular }]}>
-                                    {method === 'email'
-                                        ? `A reset link was sent to ${email}.`
-                                        : `An OTP was sent to ${country.dial} ${phone}.`}
-                                </Text>
-                                <View style={{ marginTop: 10, width: '100%' }}>
-                                    <AuthButton
-                                        label="Back to Sign In"
-                                        onPress={() => router.replace('/(auth)')}
-                                    />
-                                </View>
-                            </View>
-                        ) : (
-                            <>
-                                {/* ── Subtext ── */}
-                                <Text style={[s.sub, { fontFamily: AF.regular }]}>
-                                    Choose how you'd like to receive your reset instructions.
-                                </Text>
+                        {/* ── Subtitle ── */}
+                        <Text style={[s.sub, { fontFamily: AF.regular }]}>{subtitle}</Text>
 
-                                {/* ── Method toggle ── */}
-                                <View style={s.toggleTrack}>
-                                    <Animated.View style={[s.pill, { left: pillTranslate }]} />
-                                    <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('email')}>
-                                        <Ionicons
-                                            name="mail-outline" size={13}
-                                            color={method === 'email' ? AC.text : AC.textMuted}
-                                        />
-                                        <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'email' ? AC.text : AC.textMuted }]}>
-                                            Email
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('phone')}>
-                                        <Ionicons
-                                            name="phone-portrait-outline" size={13}
-                                            color={method === 'phone' ? AC.text : AC.textMuted}
-                                        />
-                                        <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'phone' ? AC.text : AC.textMuted }]}>
-                                            Phone
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
+                        {/* ── Step content ── */}
+                        <Animated.View style={{ opacity: stepFade }}>
 
-                                {/* ── Animated field ── */}
-                                <Animated.View style={[s.fieldWrap, { opacity: fldFade }]}>
-                                    {method === 'email' ? (
-                                        <AuthField
-                                            label="Email address"
-                                            iconName="mail-outline"
-                                            value={email}
-                                            onChangeText={(t) => { setEmail(t); setErrors((p) => ({ ...p, email: undefined })); }}
-                                            error={errors.email}
-                                            keyboardType="email-address"
-                                            autoCapitalize="none"
-                                            autoCorrect={false}
-                                        />
-                                    ) : (
-                                        <View style={s.phoneOuter}>
-                                            <View
-                                                style={[
-                                                    s.phoneField,
-                                                    { borderColor: errors.phone ? AC.error : phoneFocused ? AC.border : AC.borderSubtle },
-                                                ]}
-                                            >
-                                                <Ionicons
-                                                    name="call-outline" size={17}
-                                                    color={phoneFocused ? AC.primary : AC.textMuted}
-                                                    style={s.phoneIcon}
-                                                />
-                                                <CountryPicker selected={country} onSelect={setCountry} />
-                                                <TextInput
-                                                    style={[s.phoneInput, { fontFamily: AF.regular }]}
-                                                    placeholder="Phone number"
-                                                    placeholderTextColor={AC.textMuted}
-                                                    value={phone}
-                                                    onChangeText={(t) => { setPhone(t); setErrors((p) => ({ ...p, phone: undefined })); }}
-                                                    onFocus={() => setPhoneFocused(true)}
-                                                    onBlur={() => setPhoneFocused(false)}
-                                                    keyboardType="phone-pad"
-                                                    selectionColor={AC.primary}
-                                                />
+                            {/* ──── STEP 1: Input ──── */}
+                            {step === 'input' && (
+                                <>
+                                    {/* Method toggle */}
+                                    <View style={s.toggleTrack}>
+                                        <Animated.View style={[s.pill, { left: pillTranslate }]} />
+                                        <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('email')}>
+                                            <Ionicons
+                                                name="mail-outline" size={13}
+                                                color={method === 'email' ? AC.text : AC.textMuted}
+                                            />
+                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'email' ? AC.text : AC.textMuted }]}>
+                                                Email
+                                            </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('phone')}>
+                                            <Ionicons
+                                                name="phone-portrait-outline" size={13}
+                                                color={method === 'phone' ? AC.text : AC.textMuted}
+                                            />
+                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'phone' ? AC.text : AC.textMuted }]}>
+                                                Phone
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Animated field */}
+                                    <Animated.View style={[s.fieldWrap, { opacity: fldFade }]}>
+                                        {method === 'email' ? (
+                                            <AuthField
+                                                label="Email address"
+                                                iconName="mail-outline"
+                                                value={email}
+                                                onChangeText={(t) => { setEmail(t); setInputErrors((p) => ({ ...p, email: undefined })); }}
+                                                error={inputErrors.email}
+                                                keyboardType="email-address"
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
+                                            />
+                                        ) : (
+                                            <View style={s.phoneOuter}>
+                                                <View
+                                                    style={[
+                                                        s.phoneField,
+                                                        { borderColor: inputErrors.phone ? AC.error : phoneFocused ? AC.border : AC.borderSubtle },
+                                                    ]}
+                                                >
+                                                    <Ionicons
+                                                        name="call-outline" size={17}
+                                                        color={inputErrors.phone ? AC.error : phoneFocused ? AC.primary : AC.textSub}
+                                                        style={s.phoneIcon}
+                                                    />
+                                                    <CountryPicker selected={country} onSelect={setCountry} />
+                                                    <TextInput
+                                                        style={[s.phoneInput, { fontFamily: AF.regular }]}
+                                                        placeholder="Phone number"
+                                                        placeholderTextColor={AC.textMuted}
+                                                        value={phone}
+                                                        onChangeText={(t) => { setPhone(t); setInputErrors((p) => ({ ...p, phone: undefined })); }}
+                                                        onFocus={() => setPhoneFocused(true)}
+                                                        onBlur={() => setPhoneFocused(false)}
+                                                        keyboardType="phone-pad"
+                                                        selectionColor={AC.primary}
+                                                    />
+                                                </View>
+                                                {inputErrors.phone ? (
+                                                    <Text style={[s.phoneErr, { fontFamily: AF.regular }]}>{inputErrors.phone}</Text>
+                                                ) : null}
                                             </View>
-                                            {errors.phone ? (
-                                                <Text style={[s.phoneErr, { fontFamily: AF.regular }]}>{errors.phone}</Text>
-                                            ) : null}
-                                        </View>
-                                    )}
-                                </Animated.View>
+                                        )}
+                                    </Animated.View>
 
-                                {/* ── CTA ── */}
-                                <View style={s.cta}>
-                                    <AuthButton
-                                        label={method === 'email' ? 'Send Reset Link' : 'Send OTP'}
-                                        onPress={handleReset}
-                                        loading={loading}
-                                    />
+                                    <View style={s.cta}>
+                                        <AuthButton label={btnLabel} onPress={handleSendOTP} loading={loading} />
+                                    </View>
+                                </>
+                            )}
+
+                            {/* ──── STEP 2: OTP ──── */}
+                            {step === 'otp' && (
+                                <View style={s.stepContent}>
+                                    <View style={s.otpRow}>
+                                        {otp.map((digit, index) => (
+                                            <TextInput
+                                                key={index}
+                                                ref={(ref) => { otpRefs.current[index] = ref; }}
+                                                style={[
+                                                    s.otpInput,
+                                                    { fontFamily: AF.bold },
+                                                    digit ? s.otpInputFilled : null,
+                                                ]}
+                                                value={digit}
+                                                onChangeText={(text) => handleOtpChange(text, index)}
+                                                onKeyPress={(e) => handleOtpKeyPress(e, index)}
+                                                keyboardType="number-pad"
+                                                maxLength={1}
+                                                selectionColor={AC.primary}
+                                                autoFocus={index === 0}
+                                            />
+                                        ))}
+                                    </View>
+
+                                    <TouchableOpacity
+                                        style={s.resendRow}
+                                        onPress={() => {
+                                            setOtp(['', '', '', '']);
+                                            handleSendOTP();
+                                        }}
+                                        activeOpacity={0.6}
+                                    >
+                                        <Ionicons name="refresh-outline" size={14} color={AC.primary} />
+                                        <Text style={[s.resendTxt, { fontFamily: AF.semibold }]}>Resend Code</Text>
+                                    </TouchableOpacity>
+
+                                    <View style={s.cta}>
+                                        <AuthButton label="Verify Code" onPress={handleVerifyOTP} loading={loading} />
+                                    </View>
                                 </View>
-                            </>
-                        )}
+                            )}
 
-                        {/* ── Footer link ── */}
-                        {!sent && (
+                            {/* ──── STEP 3: Reset Password ──── */}
+                            {step === 'reset' && (
+                                <View style={s.stepContent}>
+                                    <AuthField
+                                        label="New password (min 6 characters)"
+                                        iconName="lock-closed-outline"
+                                        value={newPassword}
+                                        onChangeText={(t) => { setNewPassword(t); setPasswordErrors((p) => ({ ...p, newPassword: undefined })); }}
+                                        error={passwordErrors.newPassword}
+                                        isPassword
+                                    />
+
+                                    <AuthField
+                                        label="Confirm new password"
+                                        iconName="lock-closed-outline"
+                                        value={confirmPassword}
+                                        onChangeText={(t) => { setConfirmPassword(t); setPasswordErrors((p) => ({ ...p, confirmPassword: undefined })); }}
+                                        error={passwordErrors.confirmPassword}
+                                        isPassword
+                                    />
+
+                                    <View style={s.cta}>
+                                        <AuthButton
+                                            label={btnLabel}
+                                            onPress={handleResetPassword}
+                                            loading={loading}
+                                        />
+                                    </View>
+                                </View>
+                            )}
+
+                        </Animated.View>
+
+                        {/* ── Footer ── */}
+                        {step === 'input' && (
                             <TouchableOpacity style={s.footerLink} onPress={() => router.back()} activeOpacity={0.6}>
-                                <Ionicons name="arrow-back-outline" size={13} color={AC.textMuted} />
+                                <Ionicons name="arrow-back-outline" size={13} color={AC.textSub} />
                                 <Text style={[s.footerTxt, { fontFamily: AF.regular }]}>Back to Sign In</Text>
                             </TouchableOpacity>
                         )}
@@ -267,12 +462,18 @@ const s = StyleSheet.create({
     },
 
     head: { marginBottom: 20 },
-    greeting: { fontSize: 15, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6 },
+    greeting: { fontSize: 16, color: AC.textSub, letterSpacing: 0.3, marginBottom: 6, lineHeight: 22 },
     title: { fontSize: 36, color: AC.text, letterSpacing: 0.2, lineHeight: 42 },
     accent: { width: 36, height: 3, borderRadius: 100, backgroundColor: AC.primary, marginTop: 12 },
 
-    toastWrap: { marginBottom: 18 },
+    /* Step indicators */
+    stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    stepDot: { width: 28, height: 4, borderRadius: 100, backgroundColor: AC.borderSubtle },
+    stepDotActive: { backgroundColor: AC.primary },
+    stepDotGap: { marginRight: 6 },
+    stepLabel: { fontSize: 12, color: AC.textSub, marginLeft: 12, letterSpacing: 0.2 },
 
+    toastWrap: { marginBottom: 18 },
     sub: { fontSize: 14, color: AC.textSub, lineHeight: 20, marginBottom: 24 },
 
     /* Toggle */
@@ -306,6 +507,7 @@ const s = StyleSheet.create({
     toggleTxt: { fontSize: 13.5 },
 
     fieldWrap: { width: '100%', marginBottom: 4 },
+    stepContent: { gap: AS.gap },
 
     /* Phone */
     phoneOuter: { width: '100%' },
@@ -322,33 +524,28 @@ const s = StyleSheet.create({
     phoneInput: { flex: 1, color: AC.text, fontSize: 15, letterSpacing: 0.2 },
     phoneErr: { color: AC.error, fontSize: 11.5, marginTop: 5, marginLeft: 22, letterSpacing: 0.1 },
 
+    /* OTP */
+    otpRow: { flexDirection: 'row', justifyContent: 'center', gap: 14, marginTop: 8 },
+    otpInput: {
+        width: 58, height: 64,
+        borderRadius: 16,
+        borderWidth: 1.5,
+        borderColor: AC.borderSubtle,
+        backgroundColor: AC.bg,
+        textAlign: 'center',
+        fontSize: 24,
+        color: AC.text,
+    },
+    otpInputFilled: {
+        borderColor: AC.primary,
+        backgroundColor: 'rgba(166,217,90,0.08)',
+    },
+    resendRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
+    resendTxt: { fontSize: 13, color: AC.primary, letterSpacing: 0.2 },
+
     cta: { marginTop: 28 },
 
     /* Footer */
-    footerLink: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        marginTop: 32,
-    },
-    footerTxt: { fontSize: 13, color: AC.textMuted },
-
-    /* Success */
-    successBox: {
-        alignItems: 'center',
-        gap: 14,
-        paddingTop: 16,
-    },
-    successCircle: {
-        width: 80, height: 80,
-        borderRadius: 40,
-        borderWidth: 2,
-        borderColor: AC.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 4,
-    },
-    successTitle: { fontSize: 20, color: AC.text, letterSpacing: 0.2 },
-    successBody: { fontSize: 14, color: AC.textSub, textAlign: 'center', lineHeight: 21 },
+    footerLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 32 },
+    footerTxt: { fontSize: 13, color: AC.textSub },
 });

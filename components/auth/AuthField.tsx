@@ -1,5 +1,5 @@
 // components/auth/AuthField.tsx
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     TextInput,
@@ -12,18 +12,12 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withTiming,
-    withSequence,
-    withDelay,
-    Easing,
     interpolate,
     interpolateColor,
-    useAnimatedProps,
+    Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { AC, AR, AS, AF } from '../../lib/authTheme';
-
-// ─── Animated TextInput for border color ─────────────────────────────────────
-const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 interface AuthFieldProps extends TextInputProps {
     label: string;
@@ -43,66 +37,41 @@ export function AuthField({
 }: AuthFieldProps) {
     const [focused, setFocused] = useState(false);
     const [showPw, setShowPw] = useState(false);
+    const inputRef = useRef<TextInput>(null);
 
-    // 0 = idle/unfocused-empty  |  1 = focused or has-value-floated
-    const floated = useSharedValue(value ? 1 : 0);
-    // 0 = visible  |  1 = vanishing (on focus trigger)
-    const vanish = useSharedValue(0);
-    // border glow
+    // 0 = resting (placeholder centered), 1 = floated (label at top)
+    const progress = useSharedValue(value ? 1 : 0);
     const borderProgress = useSharedValue(0);
-    // error
     const errOpacity = useSharedValue(0);
     const errTranslateY = useSharedValue(-4);
 
-    // ── Focus / blur ──────────────────────────────────────────────────────────
+    const TIMING = { duration: 200, easing: Easing.out(Easing.quad) };
+
     const handleFocus = () => {
         setFocused(true);
-
-        if (!value) {
-            // Step 1: "blur-vanish" — scale up + fade to green + opacity 0
-            vanish.value = withSequence(
-                withTiming(1, {
-                    duration: 320,
-                    easing: Easing.out(Easing.cubic),
-                }),
-            );
-
-            // Step 2: after vanish, snap label to floated mini position
-            floated.value = withDelay(
-                280,
-                withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }),
-            );
-        }
-
+        progress.value = withTiming(1, TIMING);
         borderProgress.value = withTiming(1, { duration: 200 });
     };
 
     const handleBlur = () => {
         setFocused(false);
         borderProgress.value = withTiming(0, { duration: 200 });
-
         if (!value) {
-            // Snap back: floated collapses, then label re-appears
-            floated.value = withTiming(0, { duration: 180, easing: Easing.in(Easing.quad) });
-            vanish.value = withDelay(
-                140,
-                withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }),
-            );
+            progress.value = withTiming(0, TIMING);
         }
     };
 
-    // If value is set externally (prefill), keep floated
+    // Sync with external value changes
     useEffect(() => {
-        if (value && !focused) {
-            floated.value = withTiming(1, { duration: 200 });
-            vanish.value = withTiming(0, { duration: 1 }); // instant reset
+        if (value && progress.value === 0) {
+            progress.value = withTiming(1, TIMING);
         }
         if (!value && !focused) {
-            floated.value = withTiming(0, { duration: 200 });
+            progress.value = withTiming(0, TIMING);
         }
     }, [value]);
 
-    // ── Error animation ───────────────────────────────────────────────────────
+    // Error animation
     useEffect(() => {
         if (error) {
             errOpacity.value = withTiming(1, { duration: 180 });
@@ -113,9 +82,8 @@ export function AuthField({
         }
     }, [error]);
 
-    // ── Animated styles ───────────────────────────────────────────────────────
+    // ── Animated styles ─────────────────────────────────────────────────────
 
-    // Border container
     const borderStyle = useAnimatedStyle(() => {
         const borderColor = interpolateColor(
             borderProgress.value,
@@ -125,101 +93,86 @@ export function AuthField({
         return { borderColor };
     });
 
-    // The BIG vanishing label (placeholder position, center-ish)
-    const vanishLabelStyle = useAnimatedStyle(() => {
-        // opacity: 1 → 0 as vanish goes 0 → 1
-        const opacity = interpolate(vanish.value, [0, 0.6, 1], [1, 0.3, 0]);
-        // scale: 1 → 1.18 (stretches outward like blur explosion)
-        const scale = interpolate(vanish.value, [0, 1], [1, 1.18]);
-        // slight upward drift
-        const translateY = interpolate(vanish.value, [0, 1], [0, -6]);
-        // color: textMuted → primary green as it vanishes
-        const color = interpolateColor(vanish.value, [0, 1], [AC.textMuted, AC.primary]);
-
-        // When floated=1, don't show this layer at all (mini label takes over)
-        const floatHide = interpolate(floated.value, [0.8, 1], [1, 0]);
-
+    // Label animates: resting at vertical center → floated to top-left
+    const labelStyle = useAnimatedStyle(() => {
+        // translateY: 0 (centered) → -12 (pushed up above center)
+        const translateY = interpolate(progress.value, [0, 1], [0, -14]);
+        const fontSize = interpolate(progress.value, [0, 1], [15, 10.5]);
+        const color = interpolateColor(
+            progress.value,
+            [0, 1],
+            [AC.textMuted, focused ? AC.primary : AC.textSub],
+        );
         return {
-            opacity: opacity * floatHide,
-            transform: [{ scale }, { translateY }],
+            transform: [{ translateY }],
+            fontSize,
             color,
         };
     });
 
-    // The small floated label (top-left)
-    const floatedLabelStyle = useAnimatedStyle(() => {
-        // Only visible once fully floated
-        const opacity = interpolate(floated.value, [0.7, 1], [0, 1]);
-        const translateY = interpolate(floated.value, [0, 1], [4, 0]);
-        const color = interpolateColor(
-            borderProgress.value,
-            [0, 1],
-            [AC.textSub, AC.primary],
-        );
-        return { opacity, transform: [{ translateY }], color };
-    });
-
-    // Error text
     const errStyle = useAnimatedStyle(() => ({
         opacity: errOpacity.value,
         transform: [{ translateY: errTranslateY.value }],
     }));
 
-    // Icon color (no reanimated needed — use state)
-    const iconColor = focused ? AC.primary : AC.textMuted;
+    const iconColor = error ? AC.error : focused ? AC.primary : AC.textSub;
 
     return (
         <View style={styles.wrapper}>
-            <Animated.View style={[styles.field, borderStyle]}>
+            <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => inputRef.current?.focus()}
+            >
+                <Animated.View style={[styles.field, borderStyle]}>
+                    {/* ── Leading icon ── */}
+                    <Ionicons name={iconName} size={17} color={iconColor} style={styles.icon} />
 
-                {/* ── Leading icon ── */}
-                <Ionicons name={iconName} size={17} color={iconColor} style={styles.icon} />
+                    {/* ── Input + Label container ── */}
+                    <View style={styles.inputArea}>
+                        {/* Floating label */}
+                        <Animated.Text
+                            style={[styles.floatingLabel, { fontFamily: AF.regular }, labelStyle]}
+                            pointerEvents="none"
+                            numberOfLines={1}
+                        >
+                            {label}
+                        </Animated.Text>
 
-                {/* ── Label layer ── */}
-                <View style={styles.labelArea} pointerEvents="none">
-                    {/* Big vanishing label — sits at placeholder position */}
-                    <Animated.Text
-                        style={[styles.bigLabel, { fontFamily: AF.regular }, vanishLabelStyle]}
-                    >
-                        {label}
-                    </Animated.Text>
-
-                    {/* Mini floated label — slides up from top */}
-                    <Animated.Text
-                        style={[styles.miniLabel, { fontFamily: AF.regular }, floatedLabelStyle]}
-                    >
-                        {label}
-                    </Animated.Text>
-                </View>
-
-                {/* ── Input ── */}
-                <TextInput
-                    style={[styles.input, { fontFamily: AF.regular }]}
-                    value={value}
-                    onChangeText={onChangeText}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                    secureTextEntry={isPassword && !showPw}
-                    placeholderTextColor="transparent"
-                    selectionColor={AC.primary}
-                    {...rest}
-                />
-
-                {/* ── Eye toggle ── */}
-                {isPassword && (
-                    <TouchableOpacity
-                        onPress={() => setShowPw((v) => !v)}
-                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        style={styles.eye}
-                    >
-                        <Ionicons
-                            name={showPw ? 'eye-off-outline' : 'eye-outline'}
-                            size={17}
-                            color={AC.textMuted}
+                        {/* Actual TextInput — pushed down when label is floated */}
+                        <TextInput
+                            ref={inputRef}
+                            style={[
+                                styles.input,
+                                { fontFamily: AF.regular },
+                                (focused || !!value) && styles.inputFloated,
+                            ]}
+                            value={value}
+                            onChangeText={onChangeText}
+                            onFocus={handleFocus}
+                            onBlur={handleBlur}
+                            secureTextEntry={isPassword && !showPw}
+                            placeholderTextColor="transparent"
+                            selectionColor={AC.primary}
+                            {...rest}
                         />
-                    </TouchableOpacity>
-                )}
-            </Animated.View>
+                    </View>
+
+                    {/* ── Eye toggle ── */}
+                    {isPassword && (
+                        <TouchableOpacity
+                            onPress={() => setShowPw((v) => !v)}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            style={styles.eye}
+                        >
+                            <Ionicons
+                                name={showPw ? 'eye-off-outline' : 'eye-outline'}
+                                size={17}
+                                color={AC.textSub}
+                            />
+                        </TouchableOpacity>
+                    )}
+                </Animated.View>
+            </TouchableOpacity>
 
             {/* ── Inline error ── */}
             <Animated.Text style={[styles.errText, errStyle]}>
@@ -235,56 +188,45 @@ const styles = StyleSheet.create({
     field: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FEFCFE',
+        backgroundColor: AC.bg,
         borderRadius: AR.field,
         borderWidth: 1.5,
         height: AS.fieldHeight,
         paddingHorizontal: 20,
-        position: 'relative',
-        overflow: 'hidden',
-    },
-
-    // Sits just after the icon, takes remaining space, stacks the two labels
-    labelArea: {
-        position: 'absolute',
-        left: 48,         // icon width + margin
-        right: 48,
-        top: 0,
-        bottom: 0,
-        justifyContent: 'center',
-        pointerEvents: 'none',
-    },
-
-    // Full-size placeholder label that vanishes on focus
-    bigLabel: {
-        position: 'absolute',
-        fontSize: 15,
-        color: AC.textMuted,
-        letterSpacing: 0.2,
-        left: 0,
-    },
-
-    // Mini label that appears at top when floated
-    miniLabel: {
-        position: 'absolute',
-        fontSize: 10.5,
-        color: AC.textSub,
-        letterSpacing: 0.2,
-        top: 9,
-        left: 0,
     },
 
     icon: {
         marginRight: 10,
     },
 
+    // This container holds both the label and input stacked
+    inputArea: {
+        flex: 1,
+        height: '100%',
+        justifyContent: 'center',
+    },
+
+    // Label sits centered by default, animates up on focus
+    floatingLabel: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        letterSpacing: 0.2,
+    },
+
+    // Input occupies full height, text vertically centered by default
     input: {
         flex: 1,
         color: AC.text,
         fontSize: 15,
-        height: '100%',
-        paddingTop: 18,     // push text down so it sits below the mini label
         letterSpacing: 0.2,
+        paddingTop: 0,
+        paddingBottom: 0,
+    },
+
+    // When label is floated, push input text downward so it doesn't overlap
+    inputFloated: {
+        paddingTop: 12,
     },
 
     eye: {

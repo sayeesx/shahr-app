@@ -31,10 +31,11 @@ export const AS = {
     gap: 16,
 };
 
-// Playfair Display font families (expo-google-fonts)
+// Font families — must match the keys registered in useFonts hook
 export const AF = {
-    regular: 'PlayfairDisplay_400Regular',
-    semibold: 'PlayfairDisplay_600SemiBold',
-    bold: 'PlayfairDisplay_700Bold',
-    italic: 'PlayfairDisplay_400Regular_Italic',
+    regular: 'PlayfairDisplay',
+    semibold: 'PlayfairDisplay-SemiBold',
+    bold: 'PlayfairDisplay-Bold',
+    medium: 'PlayfairDisplay-Medium',
+    italic: 'PlayfairDisplay',
 };
