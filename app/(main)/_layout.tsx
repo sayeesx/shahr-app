@@ -86,6 +86,13 @@ export default function MainLayout() {
       <Tabs.Screen name="medical" options={{ href: null }} />
       <Tabs.Screen name="nri" options={{ href: null }} />
       <Tabs.Screen name="ai-planner" options={{ href: null }} />
+      <Tabs.Screen name="other-services" options={{ href: null }} />
+      <Tabs.Screen name="cabs" options={{ href: null }} />
+      <Tabs.Screen name="hotels" options={{ href: null }} />
+      <Tabs.Screen name="visa" options={{ href: null }} />
+      <Tabs.Screen name="pickup" options={{ href: null }} />
+      <Tabs.Screen name="hospital-consultation" options={{ href: null }} />
+      <Tabs.Screen name="flight-ticket" options={{ href: null }} />
     </Tabs>
   );
 }

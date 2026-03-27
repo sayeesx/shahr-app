@@ -217,6 +217,7 @@ export default function HomeScreen() {
                 isActive={false}
                 images={(item as any).images}
                 onPress={() => router.push(item.route as any)}
+                halfHeight={true}
               />
             ))}
           </View>
@@ -236,6 +237,35 @@ export default function HomeScreen() {
           snapToInterval={192}
           decelerationRate="fast"
         />
+
+        {/* ── Other Services ── */}
+        <SectionTitle title="Other Services" ctaLabel="See All" onCta={() => router.push('/(main)/other-services' as any)} />
+        <View style={s.otherServicesRow}>
+          <TouchableOpacity style={s.serviceBtn} onPress={() => router.push('/(main)/cabs' as any)} activeOpacity={0.8}>
+            <View style={s.serviceIconCircle}>
+              <Ionicons name="car-outline" size={28} color="#dabf7e" />
+            </View>
+            <Text style={[s.serviceLabel, { fontFamily: AF.medium }]} numberOfLines={2}>Cabs</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.serviceBtn} onPress={() => router.push('/(main)/hotels' as any)} activeOpacity={0.8}>
+            <View style={s.serviceIconCircle}>
+              <Ionicons name="bed-outline" size={28} color="#dabf7e" />
+            </View>
+            <Text style={[s.serviceLabel, { fontFamily: AF.medium }]} numberOfLines={2}>Hotels</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.serviceBtn} onPress={() => router.push('/(main)/visa' as any)} activeOpacity={0.8}>
+            <View style={s.serviceIconCircle}>
+              <Ionicons name="document-text-outline" size={28} color="#dabf7e" />
+            </View>
+            <Text style={[s.serviceLabel, { fontFamily: AF.medium }]} numberOfLines={2}>Visa Guidance</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.serviceBtn} onPress={() => router.push('/(main)/pickup' as any)} activeOpacity={0.8}>
+            <View style={s.serviceIconCircle}>
+              <Ionicons name="airplane-outline" size={28} color="#dabf7e" />
+            </View>
+            <Text style={[s.serviceLabel, { fontFamily: AF.medium }]} numberOfLines={2}>Airport Pickup</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* ── Trending Chips ── */}
         <SectionTitle title="Trending Experiences" />
@@ -382,6 +412,33 @@ const s = StyleSheet.create({
     paddingLeft: 20,
     paddingRight: 8,
     marginBottom: 24,
+  },
+
+  // Other Services
+  otherServicesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 32,
+  },
+  serviceBtn: {
+    alignItems: 'center',
+    width: 72,
+  },
+  serviceIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#305c5d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  serviceLabel: {
+    fontSize: 12,
+    color: '#000000',
+    textAlign: 'center',
+    lineHeight: 16,
   },
 
   // Chips

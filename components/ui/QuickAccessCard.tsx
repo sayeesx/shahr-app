@@ -10,6 +10,7 @@ interface QuickAccessCardProps {
   isActive?: boolean;
   onPress: () => void;
   images?: any[];
+  halfHeight?: boolean;
 }
 
 function Slideshow({ images, isActive }: { images: any[], isActive: boolean }) {
@@ -45,20 +46,33 @@ function Slideshow({ images, isActive }: { images: any[], isActive: boolean }) {
   );
 }
 
-export const QuickAccessCard = React.memo(({ label, iconName, isActive = false, onPress, images }: QuickAccessCardProps) => {
+export const QuickAccessCard = React.memo(({ label, iconName, isActive = false, onPress, images, halfHeight = false }: QuickAccessCardProps) => {
   const hasImage = images && images.length > 0;
   
   return (
     <TouchableOpacity
-      style={[s.card, isActive ? s.cardActive : s.cardInactive]}
+      style={[
+        s.card, 
+        isActive ? s.cardActive : s.cardInactive,
+        halfHeight && s.cardHalf
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       {hasImage && <Slideshow images={images} isActive={isActive} />}
-      <View style={[s.iconWrap, isActive ? s.iconWrapActive : (hasImage ? s.iconWrapImage : s.iconWrapInactive)]}>
-        <Ionicons name={iconName} size={22} color={isActive ? '#dabf7e' : (hasImage ? '#ffffff' : '#000000')} />
+      <View style={[
+        s.iconWrap, 
+        isActive ? s.iconWrapActive : (hasImage ? s.iconWrapImage : s.iconWrapInactive),
+        halfHeight && s.iconWrapHalf
+      ]}>
+        <Ionicons name={iconName} size={halfHeight ? 18 : 22} color={isActive ? '#dabf7e' : (hasImage ? '#ffffff' : '#000000')} />
       </View>
-      <Text style={[s.label, isActive ? s.labelActive : (hasImage ? s.labelImage : s.labelInactive), { fontFamily: AF.bold }]} numberOfLines={2}>
+      <Text style={[
+        s.label, 
+        isActive ? s.labelActive : (hasImage ? s.labelImage : s.labelInactive), 
+        halfHeight && s.labelHalf,
+        { fontFamily: AF.bold }
+      ]} numberOfLines={2}>
         {label}
       </Text>
 
@@ -110,5 +124,21 @@ const s = StyleSheet.create({
   },
   iconWrapImage: {
     backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  cardHalf: {
+    height: 50,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  iconWrapHalf: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  labelHalf: {
+    fontSize: 12,
   },
 });
