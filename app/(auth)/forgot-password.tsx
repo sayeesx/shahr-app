@@ -326,7 +326,7 @@ export default function ForgotPasswordScreen() {
                                                 >
                                                     <Ionicons
                                                         name="call-outline" size={17}
-                                                        color={inputErrors.phone ? AC.error : phoneFocused ? AC.primary : AC.textSub}
+                                                        color={inputErrors.phone ? AC.error : phoneFocused ? AC.text : AC.textSub}
                                                         style={s.phoneIcon}
                                                     />
                                                     <CountryPicker selected={country} onSelect={setCountry} />
@@ -339,7 +339,7 @@ export default function ForgotPasswordScreen() {
                                                         onFocus={() => setPhoneFocused(true)}
                                                         onBlur={() => setPhoneFocused(false)}
                                                         keyboardType="phone-pad"
-                                                        selectionColor={AC.primary}
+                                                        selectionColor={AC.text}
                                                     />
                                                 </View>
                                                 {inputErrors.phone ? (
@@ -373,7 +373,7 @@ export default function ForgotPasswordScreen() {
                                                 onKeyPress={(e) => handleOtpKeyPress(e, index)}
                                                 keyboardType="number-pad"
                                                 maxLength={1}
-                                                selectionColor={AC.primary}
+                                                selectionColor={AC.text}
                                                 autoFocus={index === 0}
                                             />
                                         ))}
@@ -387,7 +387,7 @@ export default function ForgotPasswordScreen() {
                                         }}
                                         activeOpacity={0.6}
                                     >
-                                        <Ionicons name="refresh-outline" size={14} color={AC.primary} />
+                                        <Ionicons name="refresh-outline" size={14} color={AC.text} />
                                         <Text style={[s.resendTxt, { fontFamily: AF.semibold }]}>Resend Code</Text>
                                     </TouchableOpacity>
 
@@ -541,7 +541,7 @@ const s = StyleSheet.create({
         backgroundColor: 'rgba(166,217,90,0.08)',
     },
     resendRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 },
-    resendTxt: { fontSize: 13, color: AC.primary, letterSpacing: 0.2 },
+    resendTxt: { fontSize: 13, color: AC.text, letterSpacing: 0.2 },
 
     cta: { marginTop: 28 },
 

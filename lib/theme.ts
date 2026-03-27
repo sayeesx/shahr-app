@@ -3,30 +3,30 @@
 
 export const Colors = {
   // Background
-  background: '#FFFFFF',
-  backgroundElevated: '#F8F8F8',
-  backgroundDark: '#F5F5F5',
+  background: '#ede6df',
+  backgroundElevated: '#fbf6f4',
+  backgroundDark: '#ede6df',
 
   // Primary Accent (Green from reference)
-  primary: '#8BC34A',
-  primaryDark: '#7CB342',
-  primaryLight: '#9CCC65',
+  primary: '#305c5d',
+  primaryDark: '#254a4b',
+  primaryLight: '#4b7a7b',
 
   // Cards
-  card: '#F5F5F5',
-  cardSecondary: '#EEEEEE',
-  cardDark: '#E0E0E0',
+  card: '#fbf6f4',
+  cardSecondary: '#ede6df',
+  cardDark: '#ede6df',
 
   // Text
-  textPrimary: '#1A1A1A',
-  textSecondary: '#666666',
-  textMuted: '#999999',
+  textPrimary: '#000000',
+  textSecondary: '#dabf7e',
+  textMuted: '#dabf7e',
   textLight: '#FFFFFF',
-  textLightMuted: '#B3B3B3',
+  textLightMuted: '#dabf7e',
 
   // UI
-  border: '#E5E5E5',
-  divider: '#EEEEEE',
+  border: '#e2d7c2',
+  divider: '#ede6df',
   overlay: 'rgba(0, 0, 0, 0.5)',
 
   // Status
@@ -100,32 +100,32 @@ export const Typography = {
 // ─── SHADOWS ────────────────────────────────────────────────────────────────
 export const Shadows = {
   card: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   cardElevated: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   button: {
-    shadowColor: '#8BC34A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   float: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 } as const;
 

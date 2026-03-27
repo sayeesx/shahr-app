@@ -86,7 +86,7 @@ export default function LoginScreen() {
         phone: user.user_metadata?.phone ?? '',
         email: user.email ?? '',
       });
-      router.replace('/(main)/profile');
+      router.replace('/(main)');
     } catch (e: any) {
       const msg = e.message || 'Login failed. Please try again.';
       if (msg.toLowerCase().includes('network')) {
@@ -228,7 +228,7 @@ const s = StyleSheet.create({
   form: { gap: AS.gap, marginBottom: 4 },
 
   forgot: { alignSelf: 'flex-end', marginTop: 2 },
-  forgotTxt: { fontSize: 13, color: AC.primary, letterSpacing: 0.2 },
+  forgotTxt: { fontSize: 13, color: AC.text, letterSpacing: 0.2 },
   linkUnderline: { borderBottomWidth: 1, borderBottomColor: AC.borderSubtle },
 
   /* actions */
@@ -240,9 +240,9 @@ const s = StyleSheet.create({
 
   signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
   signupLbl: { fontSize: 14, color: AC.textSub, lineHeight: 20 },
-  signupLink: { fontSize: 14, color: AC.primary },
+  signupLink: { fontSize: 14, color: AC.text },
 
   terms: { fontSize: 12, color: AC.textSub, lineHeight: 18 },
   termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 28 },
-  termsLinkTxt: { fontSize: 12, color: AC.primary },
+  termsLinkTxt: { fontSize: 12, color: AC.text },
 });

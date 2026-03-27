@@ -8,7 +8,7 @@ export default function Index() {
   const sessionLoaded = useAppStore((s) => s.sessionLoaded);
 
   if (session) {
-    return <Redirect href="/(main)/profile" />;
+    return <Redirect href="/(main)" />;
   }
 
   return <Redirect href="/(auth)" />;

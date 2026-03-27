@@ -10,50 +10,9 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withTiming,
-    withRepeat,
-    Easing,
-    cancelAnimation,
 } from 'react-native-reanimated';
 import { AC, AR, AS, AF } from '../../lib/authTheme';
-
-// ─── Spinner ──────────────────────────────────────────────────────────────────
-function Spinner({ visible }: { visible: boolean }) {
-    const rotation = useSharedValue(0);
-    const opacity = useSharedValue(0);
-    const scale = useSharedValue(0);
-
-    React.useEffect(() => {
-        if (visible) {
-            opacity.value = withTiming(1, { duration: 180 });
-            scale.value = withTiming(1, { duration: 180 });
-            rotation.value = withRepeat(
-                withTiming(360, { duration: 700, easing: Easing.linear }),
-                -1,
-                false,
-            );
-        } else {
-            cancelAnimation(rotation);
-            opacity.value = withTiming(0, { duration: 180 });
-            scale.value = withTiming(0, { duration: 180 });
-        }
-    }, [visible]);
-
-    const animStyle = useAnimatedStyle(() => ({
-        opacity: opacity.value,
-        transform: [
-            { scale: scale.value },
-            { rotate: `${rotation.value}deg` },
-        ],
-    }));
-
-    return (
-        <Animated.View style={[styles.iconWrap, animStyle]}>
-            <View style={styles.spinnerRing} />
-        </Animated.View>
-    );
-}
-
-// ─── Props ────────────────────────────────────────────────────────────────────
+import { ActivityIndicator } from 'react-native';
 interface AuthButtonProps {
     label: string;
     onPress: () => void | Promise<void>;
@@ -101,17 +60,14 @@ export function AuthButton({
                 disabled={isDisabled}
                 activeOpacity={0.85}
             >
-                <View style={styles.row}>
-                    {loading && <Spinner visible={true} />}
-                    <Text
-                        style={[
-                            styles.label,
-                            isPrimary ? styles.labelPrimary : styles.labelOutline,
-                            loading && { marginLeft: 8 },
-                        ]}
-                    >
-                        {label}
-                    </Text>
+                <View style={[styles.row, { height: '100%' }]}>
+                    {loading ? (
+                        <ActivityIndicator color={AC.accent} size="small" />
+                    ) : (
+                        <Text style={[styles.label, isPrimary ? styles.labelPrimary : styles.labelOutline]}>
+                            {label}
+                        </Text>
+                    )}
                 </View>
             </TouchableOpacity>
         </Animated.View>
@@ -157,24 +113,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.6,
         fontFamily: AF.semibold,
     },
-    labelPrimary: { color: AC.text },
+    labelPrimary: { color: AC.accent },
     labelOutline: { color: AC.text },
-
-    // ── Spinner ──
-    iconWrap: {
-        width: ICON_SIZE,
-        height: ICON_SIZE,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    spinnerRing: {
-        position: 'absolute',
-        width: ICON_SIZE,
-        height: ICON_SIZE,
-        borderRadius: ICON_SIZE / 2,
-        borderWidth: 2.5,
-        borderColor: AC.text,
-        borderTopColor: 'transparent',
-    },
 });

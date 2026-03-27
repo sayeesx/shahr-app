@@ -246,7 +246,7 @@ function AnimatedPhoneField({
         <Ionicons
           name="call-outline"
           size={17}
-          color={error ? AC.error : phoneFocused ? AC.primary : AC.textSub}
+          color={error ? AC.error : phoneFocused ? AC.text : AC.textSub}
           style={s.phoneIcon}
         />
         <CountryPicker selected={country} onSelect={setCountry} />
@@ -259,7 +259,7 @@ function AnimatedPhoneField({
           onFocus={() => setPhoneFocused(true)}
           onBlur={() => setPhoneFocused(false)}
           keyboardType="phone-pad"
-          selectionColor={AC.primary}
+          selectionColor={AC.text}
         />
       </Animated.View>
       {error ? (
@@ -315,10 +315,10 @@ const s = StyleSheet.create({
   actions: { marginTop: 32, gap: 22 },
   loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
   loginLbl: { fontSize: 14, color: AC.textSub, lineHeight: 20 },
-  loginLink: { fontSize: 14, color: AC.primary },
+  loginLink: { fontSize: 14, color: AC.text },
   linkUnderline: { borderBottomWidth: 1, borderBottomColor: AC.borderSubtle },
 
   terms: { fontSize: 12, color: AC.textSub, lineHeight: 18 },
   termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', marginTop: 28 },
-  termsLinkTxt: { fontSize: 12, color: AC.primary },
+  termsLinkTxt: { fontSize: 12, color: AC.text },
 });

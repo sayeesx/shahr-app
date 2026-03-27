@@ -101,7 +101,7 @@ export function AuthField({
         const color = interpolateColor(
             progress.value,
             [0, 1],
-            [AC.textMuted, focused ? AC.primary : AC.textSub],
+            [AC.textMuted, focused ? AC.text : AC.textSub],
         );
         return {
             transform: [{ translateY }],
@@ -115,7 +115,7 @@ export function AuthField({
         transform: [{ translateY: errTranslateY.value }],
     }));
 
-    const iconColor = error ? AC.error : focused ? AC.primary : AC.textSub;
+    const iconColor = error ? AC.error : focused ? AC.text : AC.textSub;
 
     return (
         <View style={styles.wrapper}>
@@ -152,7 +152,7 @@ export function AuthField({
                             onBlur={handleBlur}
                             secureTextEntry={isPassword && !showPw}
                             placeholderTextColor="transparent"
-                            selectionColor={AC.primary}
+                            selectionColor={AC.text}
                             {...rest}
                         />
                     </View>

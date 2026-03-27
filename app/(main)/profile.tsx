@@ -345,12 +345,12 @@ const s = StyleSheet.create({
     paddingVertical: 32,
     paddingHorizontal: 20,
     marginBottom: 24,
-    // Soft shadow
-    shadowColor: AC.text,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 3,
+    // No shadows (flat visual system)
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.03)',
   },
@@ -371,7 +371,7 @@ const s = StyleSheet.create({
   },
   avatarInitial: {
     fontSize: 32,
-    color: '#0A0A0A',
+    color: '#ffffff',
   },
   profileName: {
     fontSize: 24,
@@ -432,9 +432,9 @@ const s = StyleSheet.create({
     gap: 8,
     padding: 16,
     borderRadius: AR.button,
-    backgroundColor: '#FFF0F0',
+    backgroundColor: '#fbf6f4',
     borderWidth: 1.5,
-    borderColor: '#FFD6D6',
+    borderColor: '#e2d7c2',
   },
   logoutTxt: {
     fontSize: 15,

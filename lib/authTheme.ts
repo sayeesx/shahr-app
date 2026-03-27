@@ -1,18 +1,19 @@
 // lib/authTheme.ts
 export const AC = {
-    bg: '#FEFCFE',
-    surface: '#F4F2F4',
-    border: '#a6d95a',
-    borderFaint: 'rgba(166,217,90,0.4)',
-    borderSubtle: '#E8E6E8',
-    primary: '#a6d95a',
-    primaryPress: '#92c44a',
-    text: '#0A0A0A',
-    textSub: '#4A4A4A',
-    textMuted: '#AAAAAA',
+    bg: '#ede6df',
+    surface: '#fbf6f4',
+    border: '#d3ccbe',
+    borderFaint: 'rgba(0,0,0,0.1)',
+    borderSubtle: '#d3ccbe',
+    primary: '#305c5d',     // Green from home screen
+    primaryPress: '#254a4b', // Darker green
+    text: '#000000',
+    textSub: '#444444',     // changed from yellow to blackish
+    textMuted: '#777777',   // changed from yellow to blackish
     error: '#C94040',
     success: '#3A9E6A',
     warning: '#C07A10',
+    accent: '#dabf7e', // Golden yellow
 };
 
 // Border-radius tokens
