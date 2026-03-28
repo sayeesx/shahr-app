@@ -64,7 +64,7 @@ export function AuthButton({
                     {loading ? (
                         <ActivityIndicator color={AC.accent} size="small" />
                     ) : (
-                        <Text style={[styles.label, isPrimary ? styles.labelPrimary : styles.labelOutline]}>
+                        <Text style={[styles.label, isPrimary ? styles.labelPrimary : styles.labelOutline, { fontFamily: AF.medium }]}>
                             {label}
                         </Text>
                     )}
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
 
     label: {
         fontSize: 15,
-        letterSpacing: 0.6,
-        fontFamily: AF.semibold,
+        letterSpacing: 0.5,
+        fontFamily: AF.medium,
     },
     labelPrimary: { color: AC.accent },
     labelOutline: { color: AC.text },

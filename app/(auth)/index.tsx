@@ -157,7 +157,7 @@ export default function LoginScreen() {
                 activeOpacity={0.6}
               >
                 <View style={s.linkUnderline}>
-                  <Text style={[s.forgotTxt, { fontFamily: AF.semibold }]}>Forgot password?</Text>
+                  <Text style={[s.forgotTxt, { fontFamily: AF.regular }]}>Forgot password?</Text>
                 </View>
               </TouchableOpacity>
             </View>

@@ -8,4 +8,10 @@ config.resolver.extraNodeModules = {
   'react-dom/client': require.resolve('./react-dom-client-mock.js'),
 };
 
+// Allow Metro to bundle .lottie (dotLottie) files as assets
+config.resolver.assetExts = [
+  ...(config.resolver.assetExts ?? []),
+  'lottie',
+];
+
 module.exports = config;

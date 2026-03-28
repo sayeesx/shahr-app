@@ -48,6 +48,7 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const fade = useRef(new Animated.Value(0)).current;
   const fadeY = useRef(new Animated.Value(24)).current;
@@ -76,6 +77,7 @@ export default function SignupScreen() {
       const fullPhone = phone ? `${country.dial}${phone}` : '';
       await signUp(email, password, name, fullPhone);
 
+      setSuccess(true);
       flash('Account created! Redirecting…', 'success');
       setTimeout(() => {
         router.replace({
@@ -180,7 +182,13 @@ export default function SignupScreen() {
 
             {/* ── Actions ── */}
             <View style={s.actions}>
-              <AuthButton label="Create Account" onPress={handleSignup} loading={loading} />
+              {success ? (
+                <View style={{ height: AS.buttonHeight, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="checkmark-circle" size={48} color={AC.primary} />
+                </View>
+              ) : (
+                <AuthButton label="Create Account" onPress={handleSignup} loading={loading} />
+              )}
 
               <View style={s.loginRow}>
                 <Text style={[s.loginLbl, { fontFamily: AF.regular }]}>

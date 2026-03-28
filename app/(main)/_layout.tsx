@@ -12,15 +12,17 @@ export default function MainLayout() {
           tabBarActiveTintColor: '#305c5d',
           tabBarInactiveTintColor: '#737373',
         tabBarStyle: {
-            backgroundColor: '#fbf6f4',
-            borderTopColor: '#ede6df',
+          position: 'absolute',
+          backgroundColor: 'rgba(251, 246, 244, 0.95)',
+          borderTopColor: 'rgba(237, 230, 223, 0.8)',
           borderTopWidth: 1,
-          height: 60, // Fallback, safe area applied automatically by React Navigation
+          height: 70,
           paddingBottom: 8,
           paddingTop: 8,
+          elevation: 0,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 12,
           fontFamily: AF.semibold,
         },
 
@@ -32,7 +34,7 @@ export default function MainLayout() {
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <View style={[s.iconWrap, focused && s.activeBg]}>
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={26} color={color} />
             </View>
           ),
         }}
@@ -43,7 +45,7 @@ export default function MainLayout() {
           title: 'Explore',
           tabBarIcon: ({ color, focused }) => (
             <View style={[s.iconWrap, focused && s.activeBg]}>
-              <Ionicons name={focused ? 'search' : 'search-outline'} size={22} color={color} />
+              <Ionicons name={focused ? 'search' : 'search-outline'} size={26} color={color} />
             </View>
           ),
         }}
@@ -54,7 +56,7 @@ export default function MainLayout() {
           title: 'Packages',
           tabBarIcon: ({ color, focused }) => (
             <View style={[s.iconWrap, focused && s.activeBg]}>
-              <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
+              <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={26} color={color} />
             </View>
           ),
         }}
@@ -65,7 +67,7 @@ export default function MainLayout() {
           title: 'Bookings',
           tabBarIcon: ({ color, focused }) => (
             <View style={[s.iconWrap, focused && s.activeBg]}>
-              <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={22} color={color} />
+              <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={26} color={color} />
             </View>
           ),
         }}
@@ -76,7 +78,7 @@ export default function MainLayout() {
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
             <View style={[s.iconWrap, focused && s.activeBg]}>
-              <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} />
             </View>
           ),
         }}
@@ -99,9 +101,9 @@ export default function MainLayout() {
 
 const s = StyleSheet.create({
   iconWrap: {
-    width: 40,
-    height: 32,
-    borderRadius: 16,
+    width: 48,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

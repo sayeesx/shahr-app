@@ -12,7 +12,7 @@ import {
   Modal,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
@@ -37,9 +37,9 @@ const PACKAGES: PackageCardData[] = [
 const CHIPS = ['Houseboat', 'Ayurveda', 'Trekking', 'Beach', 'Luxury', 'Wildlife'];
 
 const QUICK_ACTIONS = [
-  { 
-    label: 'Book Your Tour', 
-    icon: 'bus-outline' as const, 
+  {
+    label: 'Book Your Tour',
+    icon: 'bus-outline' as const,
     route: '/(main)/packages',
     images: [
       require('../../assets/home-images/tour/1.webp'),
@@ -50,9 +50,9 @@ const QUICK_ACTIONS = [
       require('../../assets/home-images/tour/6.webp'),
     ]
   },
-  { 
-    label: 'Medical Visit', 
-    icon: 'medkit-outline' as const, 
+  {
+    label: 'Medical Visit',
+    icon: 'medkit-outline' as const,
     route: '/(main)/medical',
     images: [
       require('../../assets/home-images/medical/1.webp'),
@@ -67,6 +67,7 @@ const QUICK_ACTIONS = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const session = useAppStore((s) => s.session);
   const firstName = session?.user?.user_metadata?.name?.split(' ')?.[0] || 'Traveller';
   const [activeChip, setActiveChip] = useState(0);
@@ -168,17 +169,21 @@ export default function HomeScreen() {
   ), []);
 
   return (
-    <SafeAreaView style={s.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ede6df" />
+    <View style={s.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.scrollContent}
+        contentContainerStyle={[s.scrollContent, { paddingTop: insets.top, paddingBottom: 90 }]}
       >
         {/* ── Top Bar ── */}
         <View style={s.topBar}>
           <View>
-            <Text style={[s.greeting, { fontFamily: AF.medium }]}>{getGreeting()}, {firstName}</Text>
+            {/* Greeting: DM Sans for the phrase, Playfair Display for the user name */}
+            <Text style={[s.greeting, { fontFamily: AF.medium }]}>
+              {getGreeting()},{' '}
+              <Text style={{ fontFamily: AF.playfairBold }}>{firstName}</Text>
+            </Text>
             <Text style={[s.titleText, { fontFamily: AF.bold }]}>Plan Your Journey</Text>
           </View>
 
@@ -346,7 +351,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -366,12 +371,12 @@ const s = StyleSheet.create({
     paddingBottom: 20,
   },
   greeting: {
-    fontSize: 13,
+    fontSize: 28,
     color: '#dabf7e',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   titleText: {
-    fontSize: 26,
+    fontSize: 22,
     color: '#000000',
     letterSpacing: -0.5,
   },

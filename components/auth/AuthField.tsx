@@ -129,7 +129,7 @@ export function AuthField({
 
                     {/* ── Input + Label container ── */}
                     <View style={styles.inputArea}>
-                        {/* Floating label */}
+                        {/* Floating label — DM Sans */}
                         <Animated.Text
                             style={[styles.floatingLabel, { fontFamily: AF.regular }, labelStyle]}
                             pointerEvents="none"
@@ -139,6 +139,7 @@ export function AuthField({
                         </Animated.Text>
 
                         {/* Actual TextInput — pushed down when label is floated */}
+                        {/* TextInput — DM Sans */}
                         <TextInput
                             ref={inputRef}
                             style={[
@@ -174,7 +175,7 @@ export function AuthField({
                 </Animated.View>
             </TouchableOpacity>
 
-            {/* ── Inline error ── */}
+            {/* ── Inline error — DM Sans for microcopy readability ── */}
             <Animated.Text style={[styles.errText, errStyle]}>
                 {error ?? ''}
             </Animated.Text>

@@ -286,18 +286,18 @@ export default function ForgotPasswordScreen() {
                                         <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('email')}>
                                             <Ionicons
                                                 name="mail-outline" size={13}
-                                                color={method === 'email' ? AC.text : AC.textMuted}
+                                                color={method === 'email' ? AC.accent : AC.textMuted}
                                             />
-                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'email' ? AC.text : AC.textMuted }]}>
+                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'email' ? AC.accent : AC.textMuted }]}>
                                                 Email
                                             </Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity style={s.toggleOpt} onPress={() => switchMethod('phone')}>
                                             <Ionicons
                                                 name="phone-portrait-outline" size={13}
-                                                color={method === 'phone' ? AC.text : AC.textMuted}
+                                                color={method === 'phone' ? AC.accent : AC.textMuted}
                                             />
-                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'phone' ? AC.text : AC.textMuted }]}>
+                                            <Text style={[s.toggleTxt, { fontFamily: AF.semibold, color: method === 'phone' ? AC.accent : AC.textMuted }]}>
                                                 Phone
                                             </Text>
                                         </TouchableOpacity>
