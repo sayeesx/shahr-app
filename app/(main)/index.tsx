@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { useFocusEffect } from 'expo-router';
 
 import { useAppStore } from '../../store/useAppStore';
 import { AF } from '../../lib/authTheme';
@@ -77,6 +78,7 @@ export default function HomeScreen() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const slideAnim = React.useRef(new Animated.Value(400)).current;
   const rippleAnim = React.useRef(new Animated.Value(0)).current;
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (session?.user?.id) {
@@ -102,22 +104,54 @@ export default function HomeScreen() {
     }
   };
 
+  // Realtime subscription
+  React.useEffect(() => {
+    if (!session?.user?.id) return;
+
+    fetchNotifications();
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
   const hasNotifications = notifications.length > 0 && notifications.some(n => !n.is_read);
 
-  React.useEffect(() => {
-    if (hasNotifications) {
-      Animated.loop(
+  // Ripple effect only twice when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      if (hasNotifications) {
+        rippleAnim.setValue(0);
         Animated.sequence([
           Animated.timing(rippleAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+          Animated.timing(rippleAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+          Animated.timing(rippleAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
           Animated.timing(rippleAnim, { toValue: 0, duration: 0, useNativeDriver: true })
-        ])
-      ).start();
-    } else {
-      rippleAnim.stopAnimation();
-    }
-  }, [hasNotifications]);
+        ]).start();
+      }
+      return () => {
+        rippleAnim.stopAnimation();
+      };
+    }, [hasNotifications])
+  );
 
-  const openDrawer = () => {
+  const openDrawer = async () => {
     setIsDrawerOpen(true);
     Animated.timing(slideAnim, {
       toValue: 0,
@@ -125,6 +159,24 @@ export default function HomeScreen() {
       useNativeDriver: true,
       easing: Easing.out(Easing.ease)
     }).start();
+
+    // Auto-mark all messages as seen
+    const unreadNotifications = notifications.filter(n => !n.is_read);
+    if (unreadNotifications.length > 0 && session?.user?.id) {
+      try {
+        const { error } = await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('user_id', session.user.id)
+          .eq('is_read', false);
+
+        if (!error) {
+          setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        }
+      } catch (e) {
+        console.error('Error marking notifications as read:', e);
+      }
+    }
   };
 
   const closeDrawer = () => {
@@ -133,23 +185,23 @@ export default function HomeScreen() {
       duration: 250,
       useNativeDriver: true,
       easing: Easing.in(Easing.ease)
-    }).start(() => setIsDrawerOpen(false));
+    }).start(() => {
+      setIsDrawerOpen(false);
+      setExpandedId(null);
+    });
   };
 
   const handleNotificationPress = async (notification: any) => {
-    if (!notification.is_read) {
-      const { data, error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).select();
-      if (!error) {
-        setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-      }
-    }
-    closeDrawer();
     if (notification.path) {
+      closeDrawer();
       if (notification.path.startsWith('http')) {
         Linking.openURL(notification.path);
       } else {
         router.push(notification.path);
       }
+    } else {
+      // Toggle expansion for notifications without a path
+      setExpandedId(expandedId === notification.id ? null : notification.id);
     }
   };
 
@@ -341,7 +393,12 @@ export default function HomeScreen() {
                   </View>
                   <View style={s.notifTextWrap}>
                     <Text style={[s.notifTitle, { fontFamily: AF.bold }]}>{item.title}</Text>
-                    <Text style={[s.notifBody, { fontFamily: AF.medium }]} numberOfLines={2}>{item.message}</Text>
+                    <Text
+                      style={[s.notifBody, { fontFamily: AF.medium }]}
+                      numberOfLines={expandedId === item.id ? undefined : 2}
+                    >
+                      {item.message}
+                    </Text>
                   </View>
                   {!item.is_read && <View style={s.notifDot} />}
                 </TouchableOpacity>
@@ -366,7 +423,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingLeft: 20,
+    paddingRight: 40,
     paddingTop: 8,
     paddingBottom: 20,
   },
@@ -567,5 +625,7 @@ const s = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: '#F44336',
+    top: 0,
+    left: 0,
   },
 });

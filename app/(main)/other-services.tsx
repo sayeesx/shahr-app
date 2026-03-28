@@ -12,6 +12,7 @@ const SERVICES = [
   { label: 'Airport Pickup', icon: 'airplane-outline' as const, route: '/(main)/pickup' },
   { label: 'Hospital Consultation', icon: 'medkit-outline' as const, route: '/(main)/hospital-consultation' },
   { label: 'Flight Ticket', icon: 'ticket-outline' as const, route: '/(main)/flight-ticket' },
+  { label: 'Rentals', icon: 'key-outline' as const, route: '/(main)/rentals' },
 ];
 
 export default function OtherServicesScreen() {

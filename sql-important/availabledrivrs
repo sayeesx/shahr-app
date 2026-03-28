@@ -1,0 +1,17 @@
+-- Map your existing dummy drivers to specific cities from your locations table
+UPDATE drivers SET current_city = 'Kochi' WHERE id = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+UPDATE drivers SET current_city = 'Munnar' WHERE id = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
+UPDATE drivers SET current_city = 'Alleppey' WHERE id = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33';
+UPDATE drivers SET current_city = 'Thiruvananthapuram' WHERE id = 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44';
+UPDATE drivers SET current_city = 'Wayanad' WHERE id = 'e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55';
+
+
+Want to add more variety?
+If you want to add more drivers to other cities later, just insert them into the drivers table (and a matching car in the vehicles table), ensuring the current_city matches exactly one of the name values from your locations table.
+
+
+Run this FINAL SQL to ensure your data is perfectly synced:
+If you want to see cabs instantly right now, run this in the Supabase editor (it makes sure every vehicle is active and has a price):
+
+UPDATE vehicles SET is_active = true, price_per_km = 15 WHERE price_per_km IS NULL OR price_per_km = 0;
+UPDATE drivers SET current_city = 'Kochi' WHERE full_name = 'John Doe';
