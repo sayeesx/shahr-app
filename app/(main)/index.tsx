@@ -76,15 +76,18 @@ export default function HomeScreen() {
   // Notifications State
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const slideAnim = React.useRef(new Animated.Value(400)).current;
-  const rippleAnim = React.useRef(new Animated.Value(0)).current;
+  const r1 = React.useRef(new Animated.Value(0)).current;
+  const r2 = React.useRef(new Animated.Value(0)).current;
+  const r3 = React.useRef(new Animated.Value(0)).current;
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (session?.user?.id) {
-      fetchNotifications();
-    }
-  }, [session?.user?.id]);
+  useFocusEffect(
+    React.useCallback(() => {
+      if (session?.user?.id) {
+        fetchNotifications();
+      }
+    }, [session?.user?.id])
+  );
 
   const fetchNotifications = async () => {
     const userId = session?.user?.id;
@@ -133,32 +136,43 @@ export default function HomeScreen() {
 
   const hasNotifications = notifications.length > 0 && notifications.some(n => !n.is_read);
 
-  // Ripple effect only twice when screen is focused
+  // Ripple effect (Radar rings)
   useFocusEffect(
     React.useCallback(() => {
       if (hasNotifications) {
-        rippleAnim.setValue(0);
-        Animated.sequence([
-          Animated.timing(rippleAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-          Animated.timing(rippleAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
-          Animated.timing(rippleAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-          Animated.timing(rippleAnim, { toValue: 0, duration: 0, useNativeDriver: true })
+        r1.setValue(0);
+        r2.setValue(0);
+        r3.setValue(0);
+
+        const createRipple = (anim: Animated.Value, delay: number) => {
+          return Animated.sequence([
+            Animated.delay(delay),
+            Animated.loop(
+              Animated.sequence([
+                Animated.timing(anim, { toValue: 1, duration: 2400, useNativeDriver: true }),
+                Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true })
+              ])
+            )
+          ]);
+        };
+
+        Animated.parallel([
+          createRipple(r1, 0),
+          createRipple(r2, 800),
+          createRipple(r3, 1600),
         ]).start();
       }
+
       return () => {
-        rippleAnim.stopAnimation();
+        r1.stopAnimation();
+        r2.stopAnimation();
+        r3.stopAnimation();
       };
     }, [hasNotifications])
   );
 
   const openDrawer = async () => {
     setIsDrawerOpen(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.ease)
-    }).start();
 
     // Auto-mark all messages as seen
     const unreadNotifications = notifications.filter(n => !n.is_read);
@@ -180,28 +194,24 @@ export default function HomeScreen() {
   };
 
   const closeDrawer = () => {
-    Animated.timing(slideAnim, {
-      toValue: 400,
-      duration: 250,
-      useNativeDriver: true,
-      easing: Easing.in(Easing.ease)
-    }).start(() => {
-      setIsDrawerOpen(false);
-      setExpandedId(null);
-    });
+    setIsDrawerOpen(false);
+    setExpandedId(null);
   };
 
   const handleNotificationPress = async (notification: any) => {
-    if (notification.path) {
-      closeDrawer();
-      if (notification.path.startsWith('http')) {
-        Linking.openURL(notification.path);
-      } else {
-        router.push(notification.path);
-      }
+    if (expandedId !== notification.id) {
+      setExpandedId(notification.id);
     } else {
-      // Toggle expansion for notifications without a path
-      setExpandedId(expandedId === notification.id ? null : notification.id);
+      if (notification.path) {
+        closeDrawer();
+        if (notification.path.startsWith('http')) {
+          Linking.openURL(notification.path);
+        } else {
+          router.push(notification.path);
+        }
+      } else {
+        setExpandedId(null);
+      }
     }
   };
 
@@ -230,21 +240,30 @@ export default function HomeScreen() {
       >
         {/* ── Top Bar ── */}
         <View style={s.topBar}>
-          <View>
-            {/* Greeting: DM Sans for the phrase, Playfair Display for the user name */}
-            <Text style={[s.greeting, { fontFamily: AF.medium }]}>
+          <View style={{ flex: 1, marginRight: 16 }}>
+            {/* Greeting: DM Sans for the phrase (Black), Playfair Display for the user name (Yellow) */}
+            <Text style={[s.greeting, { fontFamily: AF.medium, color: '#000000' }]} numberOfLines={1} adjustsFontSizeToFit={true}>
               {getGreeting()},{' '}
-              <Text style={{ fontFamily: AF.playfairBold }}>{firstName}</Text>
+              <Text style={{ fontFamily: AF.playfairBold, color: '#dabf7e' }}>{firstName}</Text>
             </Text>
-            <Text style={[s.titleText, { fontFamily: AF.bold }]}>Plan Your Journey</Text>
           </View>
 
           <TouchableOpacity style={s.bellBtn} activeOpacity={0.8} onPress={openDrawer}>
             {hasNotifications && (
-              <Animated.View style={[s.rippleEffect, {
-                opacity: rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-                transform: [{ scale: rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.5] }) }]
-              }]} />
+              <>
+                <Animated.View style={[s.rippleEffect, {
+                  opacity: r1.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+                  transform: [{ scale: r1.interpolate({ inputRange: [0, 1], outputRange: [1, 3] }) }]
+                }]} />
+                <Animated.View style={[s.rippleEffect, {
+                  opacity: r2.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+                  transform: [{ scale: r2.interpolate({ inputRange: [0, 1], outputRange: [1, 3] }) }]
+                }]} />
+                <Animated.View style={[s.rippleEffect, {
+                  opacity: r3.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+                  transform: [{ scale: r3.interpolate({ inputRange: [0, 1], outputRange: [1, 3] }) }]
+                }]} />
+              </>
             )}
             <Ionicons name="notifications-outline" size={22} color="#000000" />
             {hasNotifications && <View style={s.badge} />}
@@ -362,10 +381,11 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Notifications Drawer Overlay */}
-      <Modal visible={isDrawerOpen} transparent animationType="fade">
-        <View style={s.drawerOverlay}>
-          <TouchableOpacity style={s.drawerCloseArea} activeOpacity={1} onPress={closeDrawer} />
-          <Animated.View style={[s.drawerContent, { transform: [{ translateX: slideAnim }] }]}>
+      <Modal visible={isDrawerOpen} transparent animationType="slide">
+        <View style={s.sheetOverlay}>
+          <TouchableOpacity style={s.sheetCloseArea} activeOpacity={1} onPress={closeDrawer} />
+          <View style={s.sheetContent}>
+            <View style={s.sheetHandle} />
             <View style={s.drawerHeader}>
               <Text style={[s.drawerTitle, { fontFamily: AF.bold }]}>Notifications</Text>
               <TouchableOpacity onPress={closeDrawer} style={s.closeBtn}>
@@ -400,11 +420,16 @@ export default function HomeScreen() {
                       {item.message}
                     </Text>
                   </View>
-                  {!item.is_read && <View style={s.notifDot} />}
+                  {!item.is_read && expandedId !== item.id && <View style={s.notifDot} />}
+                  {expandedId === item.id && item.path && (
+                    <View style={s.notifActionArrow}>
+                      <Ionicons name="return-down-forward-outline" size={20} color="#305c5d" />
+                    </View>
+                  )}
                 </TouchableOpacity>
               )}
             />
-          </Animated.View>
+          </View>
         </View>
       </Modal>
 
@@ -424,12 +449,12 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingLeft: 20,
-    paddingRight: 40,
-    paddingTop: 8,
+    paddingRight: 20,
+    paddingTop: 24,
     paddingBottom: 20,
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 32,
     color: '#dabf7e',
     marginBottom: 4,
   },
@@ -443,9 +468,11 @@ const s = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fbf6f4',
+    backgroundColor: '#efe8e1',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ddbe75',
   },
   badge: {
     position: 'absolute',
@@ -530,25 +557,35 @@ const s = StyleSheet.create({
     color: '#dabf7e',
   },
 
-  // Drawer
-  drawerOverlay: {
+  // Sheet
+  sheetOverlay: {
     flex: 1,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  drawerCloseArea: {
+  sheetCloseArea: {
     flex: 1,
   },
-  drawerContent: {
-    width: '80%',
-    maxWidth: 400,
+  sheetContent: {
+    width: '100%',
+    height: '92%',
     backgroundColor: '#fff',
-    height: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  sheetHandle: {
+    width: 48,
+    height: 5,
+    backgroundColor: '#ddd',
+    borderRadius: 2.5,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
   },
   drawerHeader: {
     flexDirection: 'row',
@@ -619,12 +656,25 @@ const s = StyleSheet.create({
     alignSelf: 'center',
     marginLeft: 8,
   },
+  notifActionArrow: {
+    alignSelf: 'center',
+    marginLeft: 12,
+    marginRight: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ede6df',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   rippleEffect: {
     position: 'absolute',
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F44336',
+    borderWidth: 1,
+    borderColor: '#ddbe75',
+    backgroundColor: 'transparent',
     top: 0,
     left: 0,
   },

@@ -12,10 +12,18 @@ interface AuthToastProps {
     visible: boolean;
 }
 
+const THEME = {
+    primary: '#305c5d',
+    card: '#fbf6f4',
+    white: '#fff',
+    error: '#c45c4a',
+    warning: '#b8956a',
+};
+
 const CFG: Record<ToastType, { color: string; bg: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
-    success: { color: '#4CAF50', bg: '#F1FBF1', border: '#4CAF50', icon: 'checkmark-circle-outline' },
-    error: { color: AC.error, bg: '#FDF2F2', border: 'rgba(201,64,64,0.3)', icon: 'alert-circle-outline' },
-    warning: { color: AC.warning, bg: '#FDF8EE', border: 'rgba(192,122,16,0.3)', icon: 'warning-outline' },
+    success: { color: THEME.primary, bg: THEME.card, border: THEME.primary, icon: 'checkmark-circle-outline' },
+    error: { color: THEME.error, bg: THEME.white, border: THEME.error, icon: 'alert-circle-outline' },
+    warning: { color: THEME.warning, bg: THEME.white, border: THEME.warning, icon: 'warning-outline' },
 };
 
 export function AuthToast({ message, type, visible }: AuthToastProps) {
@@ -44,7 +52,14 @@ export function AuthToast({ message, type, visible }: AuthToastProps) {
             ]}
         >
             <Ionicons name={icon} size={15} color={color} />
-            <Text style={[styles.msg, { color, fontFamily: AF.regular }]}>{message}</Text>
+            <Text 
+                style={[styles.msg, { color, fontFamily: AF.regular }]} 
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+            >
+                {message}
+            </Text>
         </Animated.View>
     );
 }

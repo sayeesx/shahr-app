@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,26 @@ import {
   ActivityIndicator,
   TextInput,
   RefreshControl,
+  Animated,
+  Dimensions,
+  Platform,
+  Easing,
+  StatusBar,
+  ScrollView,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { Image } from 'expo-image';
+
 import { AF } from '../../lib/authTheme';
 import { supabase } from '../../lib/supabase';
 import { useAppStore } from '../../store/useAppStore';
 
-// ── Types ───────────────────────────────────────────────────────────────────────
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type Booking = {
   id: string;
@@ -28,11 +40,80 @@ type Booking = {
   updated_at: string;
 };
 
-// ── Categories ──────────────────────────────────────────────────────────────────
+type BookingStatus = {
+  id: string;
+  booking_reference: string;
+  booking_id: string | null;
+  passenger_name: string;
+  passenger_phone: string;
+  passenger_email: string | null;
+  passenger_count: number | null;
+  pickup_address: string;
+  drop_address: string;
+  pickup_date: string;
+  pickup_time: string;
+  driver_id: string | null;
+  driver_name: string | null;
+  vehicle_brand: string | null;
+  vehicle_model: string | null;
+  vehicle_type: string | null;
+  price_per_km: number | null;
+  estimated_distance_km: number | null;
+  base_fare: number | null;
+  total_fare: number | null;
+  status: string;
+  status_history: any | null;
+  created_at: string;
+  updated_at: string;
+  confirmed_at: string | null;
+  driver_assigned_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+};
+
+type CombinedBooking = Booking & {
+  statusData?: BookingStatus;
+};
+
+// ── Theme Colors ────────────────────────────────────────────────────────────
+
+const THEME = {
+  primary: '#305c5d',
+  accent: '#dabf7e',
+  background: '#ede6df',
+  card: '#fbf6f4',
+  white: '#fff',
+  success: '#305c5d',
+  error: '#c45c4a',
+  warning: '#b8956a',
+  text: '#000',
+  textSecondary: '#666',
+};
+
+// ── Status Pipeline ─────────────────────────────────────────────────────────
+
+const STATUS_PIPELINE = [
+  { key: 'pending', label: 'Requested', timestampField: 'created_at' },
+  { key: 'confirmed', label: 'Confirmed', timestampField: 'confirmed_at' },
+  { key: 'in_progress', label: 'Processing', timestampField: 'driver_assigned_at' },
+  { key: 'completed', label: 'Completed', timestampField: 'completed_at' },
+];
+
+const STATUS_META: Record<string, { color: string; bg: string; label: string; icon: string }> = {
+  pending: { color: THEME.warning, bg: 'rgba(184, 149, 106, 0.15)', label: 'Pending', icon: 'time-outline' },
+  in_progress: { color: THEME.primary, bg: 'rgba(48, 92, 93, 0.15)', label: 'Processing', icon: 'sync-outline' },
+  confirmed: { color: THEME.success, bg: 'rgba(48, 92, 93, 0.15)', label: 'Confirmed', icon: 'checkmark-circle-outline' },
+  completed: { color: THEME.success, bg: 'rgba(48, 92, 93, 0.15)', label: 'Completed', icon: 'checkmark-done-outline' },
+  cancelled: { color: THEME.error, bg: 'rgba(196, 92, 74, 0.15)', label: 'Cancelled', icon: 'close-circle-outline' },
+  rejected: { color: THEME.error, bg: 'rgba(196, 92, 74, 0.15)', label: 'Rejected', icon: 'close-circle-outline' },
+};
+
+// ── Categories ───────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
   { key: 'all', label: 'All', icon: 'grid-outline' },
-  { key: 'Cab Booking', label: 'Cabs', icon: 'car-outline' }, // Exact match from DB
+  { key: 'Cab Booking', label: 'Cabs', icon: 'car-sport-outline' },
   { key: 'flight', label: 'Flights', icon: 'airplane-outline' },
   { key: 'hospital', label: 'Hospital', icon: 'medical-outline' },
   { key: 'hotel', label: 'Hotels', icon: 'bed-outline' },
@@ -40,667 +121,661 @@ const CATEGORIES = [
   { key: 'pickup', label: 'Pickup', icon: 'navigate-outline' },
   { key: 'rental', label: 'Rentals', icon: 'key-outline' },
   { key: 'visa', label: 'Visa', icon: 'document-text-outline' },
-  { key: 'tourism', label: 'Tours', icon: 'map-outline' },
+  { key: 'tourism', label: 'Tours', icon: 'earth-outline' },
   { key: 'concierge', label: 'Concierge', icon: 'headset-outline' },
-  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline' },
+  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
 ] as const;
 
-// ── Helpers ─────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const getStatusColor = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'confirmed':
-    case 'completed':
-      return '#4CAF50';
-    case 'pending':
-      return '#FFC107';
-    case 'cancelled':
-    case 'rejected':
-      return '#f44336';
-    case 'in_progress':
-      return '#2196F3';
-    default:
-      return '#305c5d';
-  }
+const getStatusMeta = (status: string) =>
+  STATUS_META[status?.toLowerCase()] || { color: THEME.primary, bg: 'rgba(48, 92, 93, 0.1)', label: status, icon: 'bookmark-outline' };
+
+const getPipelineStep = (status: string): number => {
+  const s = status?.toLowerCase();
+  if (s === 'cancelled' || s === 'rejected') return -1;
+  const idx = STATUS_PIPELINE.findIndex(p => p.key === s);
+  return idx === -1 ? 0 : idx;
 };
 
 const getCategoryIcon = (purpose: string) => {
-  const purposeLower = purpose?.toLowerCase() || '';
-  const cat = CATEGORIES.find(c =>
-    purposeLower === c.key.toLowerCase() ||
-    purposeLower.includes(c.key.toLowerCase())
-  );
-  return cat?.icon || 'bookmark-outline';
+  const p = purpose?.toLowerCase() || '';
+  if (p === 'cab booking') return 'car-sport-outline';
+  if (p.includes('flight')) return 'airplane-outline';
+  if (p.includes('hotel')) return 'bed-outline';
+  if (p.includes('medical')) return 'fitness-outline';
+  if (p.includes('hospital')) return 'medical-outline';
+  if (p.includes('pickup')) return 'navigate-outline';
+  if (p.includes('rental')) return 'key-outline';
+  if (p.includes('visa')) return 'document-text-outline';
+  if (p.includes('tour')) return 'earth-outline';
+  if (p.includes('concierge')) return 'headset-outline';
+  return 'bookmark-outline';
 };
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+const formatDate = (d: string) => {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const formatCurrency = (amount: number) => {
+const formatTime = (d: string) => {
+  if (!d) return '';
+  const date = new Date(d);
+  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
+const formatDateTime = (d: string) => {
+  if (!d) return '';
+  return new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
+const formatCurrency = (amount: number | string) => {
   if (!amount) return '';
-  return `₹${amount.toLocaleString('en-IN')}`;
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return num ? `₹${num.toLocaleString('en-IN')}` : '';
 };
 
-// ── Components ─────────────────────────────────────────────────────────────────
+const matchesCategory = (purpose: string, key: string) => {
+  const p = purpose?.toLowerCase() || '';
+  const k = key.toLowerCase();
+  if (k === 'cab booking') return p === 'cab booking';
+  if (k === 'flight') return p.includes('flight');
+  if (k === 'hospital') return p.includes('hospital') || p.includes('consultation');
+  if (k === 'hotel') return p.includes('hotel');
+  if (k === 'medical') return p.includes('medical');
+  if (k === 'pickup') return p.includes('pickup');
+  if (k === 'rental') return p.includes('rental');
+  if (k === 'visa') return p.includes('visa');
+  if (k === 'tourism') return p.includes('tourism') || p.includes('tour');
+  if (k === 'concierge') return p.includes('concierge');
+  if (k === 'other') {
+    const known = ['cab booking', 'flight', 'hotel', 'medical', 'hospital', 'consultation', 'pickup', 'rental', 'visa', 'tourism', 'concierge'];
+    return !known.some(kn => p.includes(kn));
+  }
+  return p.includes(k);
+};
 
-const BookingCard = ({ item }: { item: Booking }) => {
-  const purpose = item.purpose?.toLowerCase() || '';
-  const isCab = purpose === 'cab booking';
-  const isMedical = purpose.includes('medical');
-  const isHotel = purpose.includes('hotel');
-  const isFlight = purpose.includes('flight');
-  const isVisa = purpose.includes('visa');
-  const isRental = purpose.includes('rental');
-  const isTourism = purpose.includes('tourism') || purpose.includes('tour');
+// ── Status Timeline with Actual Timestamps from booking_status ─────────────
 
-  // Dynamic title based on booking type
-  const getTitle = () => {
-    if (isCab) return `${item.details?.vehicle_brand} ${item.details?.vehicle_model}`;
-    if (isFlight) return `${item.details?.from} → ${item.details?.to}`;
-    if (isHotel) return item.details?.hotel_name || 'Hotel Booking';
-    if (isMedical) return `Medical: ${item.details?.country || 'Consultation'}`;
-    if (isVisa) return `Visa: ${item.details?.country || 'Application'}`;
-    if (isRental) return `${item.details?.brand} ${item.details?.model}`;
-    if (isTourism) return item.details?.title || 'Tour Package';
-    return item.details?.title || item.purpose;
-  };
+const StatusTimeline = ({ item }: { item: CombinedBooking }) => {
+  const statusData = item.statusData;
+  const currentStep = getPipelineStep(statusData?.status || item.status);
+  const isCancelled = (statusData?.status || item.status)?.toLowerCase() === 'cancelled' ||
+    (statusData?.status || item.status)?.toLowerCase() === 'rejected';
+  const meta = getStatusMeta(statusData?.status || item.status);
 
-  // Dynamic subtitle based on booking type
-  const getSubtitle = () => {
-    if (isCab) return `${item.details?.pickup_address} → ${item.details?.drop_address}`;
-    if (isFlight) return `${item.details?.airline} • ${item.details?.passengers} pax`;
-    if (isHotel) return `${item.details?.location} • ${item.details?.nights} nights`;
-    if (isMedical) return item.details?.conditionSummary || item.details?.treatment;
-    if (isVisa) return item.details?.visa_type || 'Tourist Visa';
-    if (isRental) return `${item.details?.pickup_location} • ${item.details?.duration}`;
-    if (isTourism) return `${item.details?.country} • ${item.details?.interests}`;
-    return item.details?.location || item.details?.description;
-  };
+  if (isCancelled) {
+    return (
+      <View style={styles.timelineRow}>
+        <View style={styles.timelineStepActive}>
+          <View style={[styles.timelineDot, { backgroundColor: THEME.error }]}>
+            <Ionicons name="close" size={8} color="#fff" />
+          </View>
+          <Text style={[styles.timelineLabel, { color: THEME.error, fontFamily: AF.medium }]}>Cancelled</Text>
+          {statusData?.cancelled_at && (
+            <Text style={styles.timelineTime}>{formatTime(statusData.cancelled_at)}</Text>
+          )}
+        </View>
+      </View>
+    );
+  }
 
-  // Dynamic meta info
-  const getMeta = () => {
-    if (isCab) return formatCurrency(item.details?.total_fare);
-    if (isFlight) return formatCurrency(item.details?.total_price);
-    if (isHotel) return formatCurrency(item.details?.total_price);
-    if (isMedical) return item.details?.budget || item.details?.duration;
-    if (isVisa) return item.details?.processing_time || 'Standard';
-    if (isRental) return formatCurrency(item.details?.total_price);
-    if (isTourism) return item.details?.budget;
-    return item.details?.budget || '';
-  };
+  return (
+    <View style={styles.timelineRow}>
+      {STATUS_PIPELINE.map((step, idx) => {
+        const isDone = idx < currentStep;
+        const isCurrent = idx === currentStep;
+        const isPending = idx > currentStep;
 
+        // Get actual timestamp from booking_status table
+        const timestamp = statusData ? (statusData[step.timestampField as keyof BookingStatus] as string | null) : null;
+
+        return (
+          <View key={step.key} style={styles.timelineStep}>
+            <View style={[
+              styles.timelineDot,
+              isDone && { backgroundColor: THEME.success },
+              isCurrent && { backgroundColor: THEME.primary, borderWidth: 2, borderColor: THEME.accent },
+              isPending && { backgroundColor: '#eee', borderWidth: 1, borderColor: '#ccc' }
+            ]}>
+              {isDone && <Ionicons name="checkmark" size={8} color="#fff" />}
+              {isCurrent && <View style={styles.timelinePulse} />}
+            </View>
+            <Text
+              style={[
+                styles.timelineLabel,
+                { fontFamily: AF.medium },
+                isCurrent && { color: THEME.primary, fontWeight: '600' },
+                isDone && { color: THEME.success },
+                isPending && { color: '#aaa' }
+              ]}
+              numberOfLines={1}
+            >
+              {step.label}
+            </Text>
+            {timestamp && (
+              <Text style={styles.timelineTime}>{formatTime(timestamp)}</Text>
+            )}
+            {idx < STATUS_PIPELINE.length - 1 && (
+              <View style={[
+                styles.timelineConnector,
+                { backgroundColor: idx < currentStep ? THEME.success : '#eee' }
+              ]} />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+// ── Booking Card (Flight Ticket Style) ──────────────────────────────────────
+
+const BookingCard = React.memo(({ item, index }: { item: CombinedBooking; index: number }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const statusData = item.statusData;
+  const details = item.details || {};
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 240, delay: Math.min(index * 40, 180), useNativeDriver: true,
+    }).start();
+  }, [fadeAnim, index]);
+
+  // Merge data from bookings.details and booking_status table
+  const pickupAddress = statusData?.pickup_address || details.pickup_address || 'N/A';
+  const dropAddress = statusData?.drop_address || details.drop_address || 'N/A';
+  const distance = statusData?.estimated_distance_km ? `${statusData.estimated_distance_km} km` :
+    details.estimated_distance_km ? `${details.estimated_distance_km} km` : '';
+  const pricePerKm = statusData?.price_per_km ? `₹${statusData.price_per_km}/km` :
+    details.price_per_km ? `₹${details.price_per_km}/km` : '';
+  const totalFare = statusData?.total_fare ? formatCurrency(statusData.total_fare) :
+    details.total_fare ? formatCurrency(details.total_fare) : '';
+  const bookingRef = statusData?.booking_reference || details.booking_reference || item.id.slice(0, 8).toUpperCase();
+  const passengerName = statusData?.passenger_name || details.passenger_name || 'N/A';
+  const passengerPhone = statusData?.passenger_phone || details.passenger_phone || 'N/A';
+  const passengerCount = statusData?.passenger_count ? `${statusData.passenger_count} Passenger(s)` : '';
+  const vehicleInfo = `${statusData?.vehicle_brand || details.vehicle_brand || ''} ${statusData?.vehicle_model || details.vehicle_model || ''}`.trim();
+  const vehicleType = statusData?.vehicle_type || details.vehicle_type || '';
+  const driverName = statusData?.driver_name || details.driver_name || 'Not Assigned';
+  const pickupDate = statusData?.pickup_date ? formatDate(statusData.pickup_date) :
+    details.pickup_date ? formatDate(details.pickup_date) : '';
+  const pickupTime = statusData?.pickup_time ? formatTime(statusData.pickup_time) :
+    details.pickup_time ? formatTime(details.pickup_time) : '';
+  const currentStatus = statusData?.status || item.status;
+
+  const meta = getStatusMeta(currentStatus);
   const iconName = getCategoryIcon(item.purpose);
 
   return (
-    <TouchableOpacity style={s.card} activeOpacity={0.9}>
-      {/* Header */}
-      <View style={s.cardHeader}>
-        <View style={s.cardIconWrap}>
-          <Ionicons name={iconName as any} size={20} color="#305c5d" />
-        </View>
-        <View style={s.cardHeaderText}>
-          <Text style={[s.cardPurpose, { fontFamily: AF.medium }]}>{item.purpose}</Text>
-          <Text style={[s.cardDateSmall, { fontFamily: AF.regular }]}>
-            {formatDate(item.created_at)}
-          </Text>
-        </View>
-        <View style={[s.badge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-          <Text style={[s.badgeText, { color: getStatusColor(item.status), fontFamily: AF.semibold }]}>
-            {item.status}
-          </Text>
-        </View>
+    <Animated.View style={[
+      styles.cardOuter,
+      { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }
+    ]}>
+      {/* Ticket perforated edge */}
+      <View style={styles.ticketEdge}>
+        <View style={styles.perfTop} />
+        <View style={styles.perfCircle} />
+        <View style={styles.perfBottom} />
       </View>
 
-      {/* Body */}
-      <View style={s.cardBody}>
-        <Text style={[s.cardTitle, { fontFamily: AF.bold }]} numberOfLines={1}>
-          {getTitle()}
-        </Text>
-        {getSubtitle() && (
-          <Text style={[s.cardSubtitle, { fontFamily: AF.medium }]} numberOfLines={2}>
-            {getSubtitle()}
-          </Text>
+      <View style={styles.ticketBody}>
+        {/* Header: Ref + Status Badge */}
+        <View style={styles.ticketHeader}>
+          <View style={styles.ticketRef}>
+            <Ionicons name="ticket-outline" size={14} color={THEME.primary} />
+            <Text style={[styles.ticketRefCode, { fontFamily: AF.bold }]}>{bookingRef}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
+            <Ionicons name={meta.icon as any} size={13} color={meta.color} />
+            <Text style={[styles.statusBadgeText, { color: meta.color, fontFamily: AF.medium }]}>{meta.label}</Text>
+          </View>
+        </View>
+
+        {/* Route: Pickup → Drop */}
+        <View style={styles.routeRow}>
+          <View style={styles.routePoint}>
+            <Ionicons name="location-outline" size={13} color={THEME.primary} />
+            <Text style={[styles.routeText, { fontFamily: AF.medium }]} numberOfLines={2}>{pickupAddress}</Text>
+          </View>
+          <View style={styles.routeArrow}>
+            <Ionicons name="arrow-forward" size={14} color="#aaa" />
+          </View>
+          <View style={[styles.routePoint, { alignItems: 'flex-end' }]}>
+            <Ionicons name="navigate-outline" size={13} color={THEME.success} />
+            <Text style={[styles.routeText, { fontFamily: AF.medium, textAlign: 'right' }]} numberOfLines={2}>{dropAddress}</Text>
+          </View>
+        </View>
+
+        {/* Pickup Date & Time */}
+        {(pickupDate || pickupTime) && (
+          <View style={styles.pickupInfoRow}>
+            {pickupDate && (
+              <View style={styles.pickupInfoItem}>
+                <Ionicons name="calendar-outline" size={12} color={THEME.primary} />
+                <Text style={styles.pickupInfoText}>{pickupDate}</Text>
+              </View>
+            )}
+            {pickupTime && (
+              <View style={styles.pickupInfoItem}>
+                <Ionicons name="time-outline" size={12} color={THEME.primary} />
+                <Text style={styles.pickupInfoText}>{pickupTime}</Text>
+              </View>
+            )}
+          </View>
         )}
-      </View>
 
-      {/* Footer */}
-      <View style={s.cardFooter}>
-        <View style={s.cardMeta}>
-          <Ionicons name="receipt-outline" size={14} color="#dabf7e" />
-          <Text style={[s.cardId, { fontFamily: AF.medium }]}>
-            {item.details?.booking_reference || item.id.slice(0, 8).toUpperCase()}
-          </Text>
+        {/* Compact Details Row */}
+        <View style={styles.detailsRow}>
+          {vehicleInfo ? (
+            <View style={styles.detailChip}>
+              <Ionicons name="car-outline" size={11} color="#888" />
+              <Text style={styles.detailText} numberOfLines={1}>{vehicleInfo}</Text>
+            </View>
+          ) : null}
+          {vehicleType ? (
+            <View style={styles.detailChip}>
+              <Ionicons name="cube-outline" size={11} color="#888" />
+              <Text style={styles.detailText}>{vehicleType}</Text>
+            </View>
+          ) : null}
+          {driverName && driverName !== 'Not Assigned' && driverName !== 'N/A' ? (
+            <View style={styles.detailChip}>
+              <Ionicons name="person-outline" size={11} color="#888" />
+              <Text style={styles.detailText} numberOfLines={1}>{driverName}</Text>
+            </View>
+          ) : null}
+          {distance ? (
+            <View style={styles.detailChip}>
+              <Ionicons name="speedometer-outline" size={11} color="#888" />
+              <Text style={styles.detailText}>{distance}</Text>
+            </View>
+          ) : null}
+          {passengerName && passengerName !== 'N/A' ? (
+            <View style={styles.detailChip}>
+              <Ionicons name="people-outline" size={11} color="#888" />
+              <Text style={styles.detailText} numberOfLines={1}>{passengerName}</Text>
+            </View>
+          ) : null}
         </View>
-        {getMeta() && (
-          <Text style={[s.cardPrice, { fontFamily: AF.bold }]}>{getMeta()}</Text>
-        )}
-      </View>
 
-      {/* Action Buttons */}
-      <View style={s.cardActions}>
-        <TouchableOpacity style={s.actionBtn} activeOpacity={0.8}>
-          <Ionicons name="eye-outline" size={16} color="#305c5d" />
-          <Text style={[s.actionText, { fontFamily: AF.medium }]}>View</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} activeOpacity={0.8}>
-          <Ionicons name="chatbubble-outline" size={16} color="#305c5d" />
-          <Text style={[s.actionText, { fontFamily: AF.medium }]}>Chat</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} activeOpacity={0.8}>
-          <Ionicons name="share-outline" size={16} color="#305c5d" />
-          <Text style={[s.actionText, { fontFamily: AF.medium }]}>Share</Text>
-        </TouchableOpacity>
+        {/* Dashed Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dashedLine} />
+        </View>
+
+        {/* Status Timeline with Timestamps from booking_status */}
+        <View style={styles.timelineContainer}>
+          <StatusTimeline item={item} />
+        </View>
+
+        {/* Footer: Created Date + Price */}
+        <View style={styles.ticketFooter}>
+          <View style={styles.footerLeft}>
+            <Ionicons name="calendar-outline" size={12} color="#999" />
+            <Text style={styles.footerDate}>Booked: {formatDateTime(statusData?.created_at || item.created_at)}</Text>
+          </View>
+          {totalFare ? (
+            <Text style={[styles.footerPrice, { color: meta.color, fontFamily: AF.bold }]}>{totalFare}</Text>
+          ) : null}
+        </View>
       </View>
-    </TouchableOpacity>
+    </Animated.View>
   );
-};
+});
 
-const EmptyState = ({ searchQuery, activeCategory }: { searchQuery: string; activeCategory: string }) => (
-  <View style={s.empty}>
-    <Ionicons
-      name={searchQuery ? "search-outline" : "receipt-outline"}
-      size={64}
-      color="#dabf7e"
-    />
-    <Text style={[s.emptyTitle, { fontFamily: AF.semibold }]}>
-      {searchQuery ? 'No results found' : activeCategory === 'all' ? 'No bookings yet' : `No ${activeCategory} bookings`}
-    </Text>
-    <Text style={[s.emptyText, { fontFamily: AF.regular }]}>
-      {searchQuery
-        ? `No bookings match "${searchQuery}"`
-        : activeCategory === 'all'
-          ? 'Your bookings will appear here once you make a reservation'
-          : `You don't have any ${activeCategory} bookings yet`
-      }
-    </Text>
+// ── Summary Cards ───────────────────────────────────────────────────────────
+
+const SummaryCards = ({ total, pending, confirmed }: { total: number; pending: number; confirmed: number }) => (
+  <View style={styles.summaryContainer}>
+    <View style={styles.summaryItem}>
+      <Text style={[styles.summaryNum, { fontFamily: AF.bold }]}>{total}</Text>
+      <Text style={styles.summaryLbl}>Total</Text>
+    </View>
+    <View style={styles.summarySep} />
+    <View style={styles.summaryItem}>
+      <Text style={[styles.summaryNum, { color: THEME.warning, fontFamily: AF.bold }]}>{pending}</Text>
+      <Text style={styles.summaryLbl}>Pending</Text>
+    </View>
+    <View style={styles.summarySep} />
+    <View style={styles.summaryItem}>
+      <Text style={[styles.summaryNum, { color: THEME.success, fontFamily: AF.bold }]}>{confirmed}</Text>
+      <Text style={styles.summaryLbl}>Confirmed</Text>
+    </View>
   </View>
 );
 
-// ── Main Component ──────────────────────────────────────────────────────────────
+// ── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function BookingsScreen() {
+  const insets = useSafeAreaInsets();
   const session = useAppStore((s) => s.session);
 
-  // State
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<CombinedBooking[]>([]);
+  const [bookingStatuses, setBookingStatuses] = useState<BookingStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
 
-  // Fetch bookings
-  const fetchBookings = useCallback(async () => {
-    if (!session?.user?.id) {
-      setLoading(false);
-      return;
-    }
+  const headerOpacity = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    Animated.timing(headerOpacity, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [headerOpacity]);
+
+  useEffect(() => { fetchBookings(); }, []);
+
+  const fetchBookings = async () => {
     try {
-      console.log('Fetching bookings for user:', session.user.id); // Debug log
-
-      const { data, error } = await supabase
+      // Fetch from bookings table
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
-        .eq('client_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+      if (bookingsError) throw bookingsError;
 
-      console.log('Fetched bookings:', data?.length, data); // Debug log
-      setBookings(data || []);
-    } catch (err) {
-      console.error('Error fetching bookings:', err);
+      // Fetch from booking_status table
+      const { data: statusData, error: statusError } = await supabase
+        .from('booking_status')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (statusError) throw statusError;
+
+      setBookings(bookingsData || []);
+      setBookingStatuses(statusData || []);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [session?.user?.id]);
+  };
 
-  // Initial load
-  React.useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
-
-  // Pull to refresh
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    fetchBookings();
-  }, [fetchBookings]);
+    await fetchBookings();
+    setRefreshing(false);
+  }, []);
 
-  // FIXED: Category filter with proper case-insensitive matching
+  // Combine bookings with their status data
+  const combinedBookings = useMemo(() => {
+    return bookings.map(booking => {
+      const bookingRef = booking.details?.booking_reference;
+      const statusData = bookingStatuses.find(
+        status => status.booking_reference === bookingRef || status.booking_id === booking.id
+      );
+      return { ...booking, statusData };
+    });
+  }, [bookings, bookingStatuses]);
+
   const filteredBookings = useMemo(() => {
-    let result = bookings;
+    return combinedBookings.filter(booking => {
+      const matchesCategoryFilter = activeCategory === 'all' || matchesCategory(booking.purpose, activeCategory);
+      const details = booking.details || {};
+      const statusData = booking.statusData;
+      const matchesSearch = searchQuery === '' ||
+        booking.purpose?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        details.booking_reference?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        statusData?.booking_reference?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        details.passenger_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        statusData?.passenger_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        details.pickup_address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        statusData?.pickup_address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        booking.id.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategoryFilter && matchesSearch;
+    });
+  }, [combinedBookings, activeCategory, searchQuery]);
 
-    // Category filter - case insensitive
-    if (activeCategory !== 'all') {
-      result = result.filter(b => {
-        const purpose = b.purpose?.toLowerCase() || '';
-        const category = activeCategory.toLowerCase();
-
-        // Exact match for "Cab Booking" (handles your specific case)
-        if (category === 'cab booking') {
-          return purpose === 'cab booking';
-        }
-
-        // Partial matches for other categories
-        if (category === 'flight') return purpose.includes('flight');
-        if (category === 'hospital') return purpose.includes('hospital') || purpose.includes('consultation');
-        if (category === 'hotel') return purpose.includes('hotel');
-        if (category === 'medical') return purpose.includes('medical');
-        if (category === 'pickup') return purpose.includes('pickup');
-        if (category === 'rental') return purpose.includes('rental');
-        if (category === 'visa') return purpose.includes('visa');
-        if (category === 'tourism') return purpose.includes('tourism') || purpose.includes('tour');
-        if (category === 'concierge') return purpose.includes('concierge');
-
-        // Other category - anything not matching above
-        if (category === 'other') {
-          const known = ['cab booking', 'flight', 'hotel', 'medical', 'hospital', 'consultation', 'pickup', 'rental', 'visa', 'tourism', 'concierge'];
-          return !known.some(k => purpose.includes(k));
-        }
-
-        return purpose.includes(category);
-      });
-    }
-
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(b => {
-        const searchable = [
-          b.purpose,
-          b.details?.booking_reference,
-          b.details?.vehicle_brand,
-          b.details?.vehicle_model,
-          b.details?.pickup_address,
-          b.details?.drop_address,
-          b.details?.hotel_name,
-          b.details?.location,
-          b.details?.country,
-          b.details?.from,
-          b.details?.to,
-          b.details?.airline,
-          b.details?.title,
-          b.details?.description,
-          b.status,
-          b.id,
-        ].filter(Boolean).join(' ').toLowerCase();
-
-        return searchable.includes(query);
-      });
-    }
-
-    return result;
-  }, [bookings, activeCategory, searchQuery]);
-
-  // Stats
   const stats = useMemo(() => ({
-    total: bookings.length,
-    pending: bookings.filter(b => b.status?.toLowerCase() === 'pending').length,
-    confirmed: bookings.filter(b => ['confirmed', 'completed'].includes(b.status?.toLowerCase())).length,
-  }), [bookings]);
+    total: combinedBookings.length,
+    pending: combinedBookings.filter(b => (b.statusData?.status || b.status)?.toLowerCase() === 'pending').length,
+    confirmed: combinedBookings.filter(b => {
+      const status = (b.statusData?.status || b.status)?.toLowerCase();
+      return status === 'confirmed' || status === 'completed' || status === 'in_progress';
+    }).length,
+  }), [combinedBookings]);
 
-  // Render category chip - FIXED count logic
-  const renderCategory = ({ item }: { item: typeof CATEGORIES[number] }) => {
-    const isActive = activeCategory === item.key;
+  const renderHeader = () => (
+    <Animated.View style={[{ opacity: headerOpacity }]}>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleWrap}>
+          <Text style={[styles.headerSubtitle, { fontFamily: AF.medium }]}>{combinedBookings.length} reservations</Text>
+          <Text style={[styles.headerTitle, { fontFamily: AF.playfairBold }]}>My Bookings</Text>
+        </View>
+      </View>
 
-    // FIXED: Proper count logic matching the filter logic
-    const count = item.key === 'all'
-      ? bookings.length
-      : bookings.filter(b => {
-        const purpose = b.purpose?.toLowerCase() || '';
-        const key = item.key.toLowerCase();
+      {/* Main Form Card with distinct sections */}
+      <View style={styles.formCard}>
 
-        if (key === 'cab booking') return purpose === 'cab booking';
-        if (key === 'flight') return purpose.includes('flight');
-        if (key === 'hospital') return purpose.includes('hospital') || purpose.includes('consultation');
-        if (key === 'hotel') return purpose.includes('hotel');
-        if (key === 'medical') return purpose.includes('medical');
-        if (key === 'pickup') return purpose.includes('pickup');
-        if (key === 'rental') return purpose.includes('rental');
-        if (key === 'visa') return purpose.includes('visa');
-        if (key === 'tourism') return purpose.includes('tourism') || purpose.includes('tour');
-        if (key === 'concierge') return purpose.includes('concierge');
-        if (key === 'other') {
-          const known = ['cab booking', 'flight', 'hotel', 'medical', 'hospital', 'consultation', 'pickup', 'rental', 'visa', 'tourism', 'concierge'];
-          return !known.some(k => purpose.includes(k));
-        }
-        return purpose.includes(key);
-      }).length;
-
-    return (
-      <TouchableOpacity
-        style={[s.chip, isActive && s.chipActive]}
-        onPress={() => setActiveCategory(item.key)}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={item.icon as any}
-          size={16}
-          color={isActive ? '#fff' : '#305c5d'}
-        />
-        <Text style={[s.chipText, isActive && s.chipTextActive, { fontFamily: AF.medium }]}>
-          {item.label}
-        </Text>
-        {count > 0 && (
-          <View style={[s.chipBadge, isActive && s.chipBadgeActive]}>
-            <Text style={[s.chipBadgeText, isActive && s.chipBadgeTextActive, { fontFamily: AF.bold }]}>
-              {count}
-            </Text>
+        {/* ── Search Container (Distinct from card) ── */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchIconWrap}>
+            <Ionicons name="search-outline" size={20} color={THEME.primary} />
           </View>
-        )}
-      </TouchableOpacity>
+          <TextInput
+            style={[styles.searchInput, { fontFamily: AF.medium }]}
+            placeholder="Search bookings..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+              <Ionicons name="close-circle" size={18} color="#bbb" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Summary inside form card but visually separated */}
+        <View style={styles.summaryWrap}>
+          <SummaryCards total={stats.total} pending={stats.pending} confirmed={stats.confirmed} />
+        </View>
+
+        <View style={styles.formDivider} />
+
+        {/* Category filters */}
+        <View style={styles.filterRow}>
+          <Text style={[styles.filterTitle, { fontFamily: AF.bold }]}>Category</Text>
+          <TouchableOpacity onPress={() => setShowMoreFilters(!showMoreFilters)}>
+            <Text style={[styles.filterToggle, { fontFamily: AF.semibold }]}>{showMoreFilters ? 'Show Less' : 'Show More'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.filterGrid}>
+          {CATEGORIES.slice(0, showMoreFilters ? CATEGORIES.length : 4).map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.filterChip, activeCategory === item.key && styles.filterChipActive]}
+              activeOpacity={0.8}
+              onPress={() => setActiveCategory(item.key)}
+            >
+              <Ionicons name={item.icon as any} size={20} color={activeCategory === item.key ? THEME.accent : THEME.primary} />
+              <Text style={[styles.filterChipText, activeCategory === item.key && styles.filterChipTextActive, { fontFamily: AF.semibold }]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { fontFamily: AF.bold }]}>Recent Bookings</Text>
+        <Text style={[styles.sectionCount, { fontFamily: AF.medium }]}>{filteredBookings.length} Total</Text>
+      </View>
+    </Animated.View>
+  );
+
+  const renderEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={THEME.primary} />
+          <Text style={[styles.loadingText, { fontFamily: AF.medium }]}>Loading bookings...</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="receipt-outline" size={48} color="#ccc" />
+        <Text style={[styles.emptyStateText, { fontFamily: AF.medium }]}>
+          {searchQuery ? 'No results found' : activeCategory === 'all' ? 'No bookings yet' : `No ${activeCategory} bookings`}
+        </Text>
+      </View>
     );
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={['top']}>
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerTop}>
-          <View>
-            <Text style={[s.title, { fontFamily: AF.bold }]}>My Bookings</Text>
-            <Text style={[s.subtitle, { fontFamily: AF.regular }]}>
-              {stats.total} total • {stats.pending} pending • {stats.confirmed} confirmed
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={s.searchBtn}
-            onPress={() => setShowSearch(!showSearch)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={showSearch ? "close" : "search"} size={22} color="#305c5d" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        {showSearch && (
-          <View style={s.searchWrap}>
-            <Ionicons name="search" size={18} color="#999" />
-            <TextInput
-              style={[s.searchInput, { fontFamily: AF.medium }]}
-              placeholder="Search bookings, references, locations..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color="#999" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
-
-      {/* Categories */}
-      <View style={s.categoriesWrap}>
-        <FlatList
-          horizontal
-          data={CATEGORIES}
-          renderItem={renderCategory}
-          keyExtractor={(item) => item.key}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.categoriesList}
-        />
-      </View>
-
-      {/* Debug Info - Remove after testing */}
-      {__DEV__ && (
-        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
-          <Text style={{ fontSize: 11, color: '#999', fontFamily: AF.regular }}>
-            Debug: {bookings.length} total bookings | Current filter: {activeCategory}
-          </Text>
-        </View>
-      )}
-
-      {/* Bookings List */}
+    <View style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <FlatList
+        style={styles.listStyle}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 120 }]}
         data={filteredBookings}
-        contentContainerStyle={s.list}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#305c5d" />
-        }
-        ListEmptyComponent={<EmptyState searchQuery={searchQuery} activeCategory={activeCategory} />}
-        renderItem={({ item }) => <BookingCard item={item} />}
         keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => <BookingCard item={item} index={index} />}
+        ListHeaderComponent={renderHeader()}
+        ListEmptyComponent={renderEmpty}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ──────────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#ede6df' },
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: THEME.background },
+  listStyle: { flex: 1 },
+  scrollContent: { paddingBottom: 20 },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
+  backBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: THEME.card, alignItems: 'center', justifyContent: 'center' },
+  headerTitleWrap: { flex: 1, marginLeft: 14 },
+  headerSubtitle: { fontSize: 13, color: THEME.accent, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 1 },
+  headerTitle: { fontSize: 24, color: THEME.text, letterSpacing: -0.5 },
+
+  // Main form card
+  formCard: { backgroundColor: THEME.white, marginHorizontal: 20, borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#eee' },
+
+  // ── Distinct Search Container ──
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.card,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginBottom: 12,
+  },
+  searchIconWrap: { width: 28, alignItems: 'center', marginRight: 6 },
+  searchInput: { flex: 1, fontSize: 15, color: THEME.text, paddingVertical: 2 },
+  searchClear: { padding: 3 },
+
+  // Summary section
+  summaryWrap: { marginVertical: 10, paddingHorizontal: 4 },
+  summaryContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 8 },
+  summaryItem: { alignItems: 'center', paddingHorizontal: 10 },
+  summarySep: { width: 1, height: 28, backgroundColor: '#f0f0f0' },
+  summaryNum: { fontSize: 20, color: THEME.text, letterSpacing: -0.3 },
+  summaryLbl: { fontSize: 11, color: THEME.textSecondary, textTransform: 'uppercase', marginTop: 3, letterSpacing: 0.3 },
+
+  formDivider: { height: 1, backgroundColor: '#f0f0f0', marginVertical: 10, marginLeft: 28 },
+
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 10 },
+  filterTitle: { fontSize: 14, color: THEME.text },
+  filterToggle: { fontSize: 12, color: THEME.primary },
+
+  filterGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6, gap: 8 },
+  filterChip: { borderRadius: 16, backgroundColor: THEME.card, borderWidth: 1, borderColor: '#eee', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, width: '23%' },
+  filterChipActive: { backgroundColor: THEME.primary, borderColor: THEME.primary },
+  filterChipText: { fontSize: 11, color: '#666', textAlign: 'center', marginTop: 5 },
+  filterChipTextActive: { color: THEME.accent },
+
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 17, color: THEME.text },
+  sectionCount: { fontSize: 14, color: '#888' },
+
+  // ── Booking Card Styles ──
+  cardOuter: {
+    flexDirection: 'row',
+    backgroundColor: THEME.white,
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+
+  // Ticket perforated edge
+  ticketEdge: { width: 8, backgroundColor: THEME.card, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#e0e0e0' },
+  perfTop: { width: 5, height: 8, backgroundColor: THEME.background, borderBottomLeftRadius: 2.5, borderBottomRightRadius: 2.5 },
+  perfCircle: { width: 13, height: 13, borderRadius: 7, backgroundColor: THEME.background, marginVertical: 3 },
+  perfBottom: { width: 5, height: 8, backgroundColor: THEME.background, borderTopLeftRadius: 2.5, borderTopRightRadius: 2.5 },
+
+  ticketBody: { flex: 1, padding: 14 },
 
   // Header
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  title: {
-    fontSize: 28,
-    color: '#000',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
-  searchBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fbf6f4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fbf6f4',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
-    marginTop: 16,
-    gap: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#000',
-  },
+  ticketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  ticketRef: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ticketRefCode: { fontSize: 12, color: THEME.primary, letterSpacing: 0.5 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 5 },
+  statusBadgeText: { fontSize: 10 },
 
-  // Categories
-  categoriesWrap: {
-    marginBottom: 16,
-  },
-  categoriesList: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#fbf6f4',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2d7c2',
-  },
-  chipActive: {
-    backgroundColor: '#305c5d',
-    borderColor: '#305c5d',
-  },
-  chipText: {
-    fontSize: 13,
-    color: '#305c5d',
-  },
-  chipTextActive: {
-    color: '#fff',
-  },
-  chipBadge: {
-    backgroundColor: '#dabf7e',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    marginLeft: 4,
-  },
-  chipBadgeActive: {
-    backgroundColor: '#fff',
-  },
-  chipBadgeText: {
-    fontSize: 10,
-    color: '#fff',
-  },
-  chipBadgeTextActive: {
-    color: '#305c5d',
-  },
+  // Route section
+  routeRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 5 },
+  routePoint: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  routeText: { fontSize: 12, color: THEME.text, flex: 1, lineHeight: 18 },
+  routeArrow: { paddingHorizontal: 4, paddingTop: 2 },
 
-  // List
-  list: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    gap: 16,
-  },
+  // Pickup info
+  pickupInfoRow: { flexDirection: 'row', gap: 12, marginBottom: 6 },
+  pickupInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pickupInfoText: { fontSize: 11, color: THEME.textSecondary, fontFamily: AF.medium },
 
-  // Card
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#fbf6f4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  cardHeaderText: {
-    flex: 1,
-  },
-  cardPurpose: {
-    fontSize: 12,
-    color: '#666',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardDateSmall: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 11,
-    textTransform: 'capitalize',
-  },
-  cardBody: {
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 17,
-    color: '#000',
-    marginBottom: 6,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f5f5f5',
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  cardId: {
-    fontSize: 12,
-    color: '#999',
-  },
-  cardPrice: {
-    fontSize: 16,
-    color: '#305c5d',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#fbf6f4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  actionText: {
-    fontSize: 12,
-    color: '#305c5d',
-  },
+  // Details chips
+  detailsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 6 },
+  detailChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: THEME.card, borderRadius: 6 },
+  detailText: { fontSize: 10, color: '#666' },
 
-  // Empty State
-  empty: {
-    paddingVertical: 80,
-    alignItems: 'center',
-    gap: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    color: '#000',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-});
+  // Dashed divider
+  divider: { marginVertical: 5 },
+  dashedLine: { height: 1, backgroundColor: 'transparent', borderWidth: 0.5, borderColor: '#ccc', borderStyle: 'dashed' },
+
+  // Timeline
+  timelineContainer: { marginBottom: 6 },
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  timelineStep: { alignItems: 'center', flex: 1, paddingHorizontal: 2 },
+  timelineStepActive: { alignItems: 'center' },
+  timelineDot: { width: 13, height: 13, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  timelinePulse: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: THEME.primary + '30' },
+  timelineLabel: { fontSize: 9, textAlign: 'center', paddingHorizontal: 1, fontFamily: AF.medium },
+  timelineTime: { fontSize: 8, color: '#999', textAlign: 'center', marginTop: 1 },
+  timelineConnector: { position: 'absolute', top: 6, left: '50%', right: '-50%', height: 1 },
+
+  // Footer
+  ticketFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTopWidth: 0.5, borderTopColor: '#e8e8e8' },
+  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footerDate: { fontSize: 10, color: '#999' },
+  footerPrice: { fontSize: 14 },
+
+  // Empty & Loading
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyStateText: { marginTop: 14, fontSize: 15, color: '#888' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 14 },
+  loadingText: { fontSize: 14, color: THEME.textSecondary },
+}); 

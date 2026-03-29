@@ -10,7 +10,6 @@ import {
   StatusBar,
   RefreshControl,
   Keyboard,
-  Modal,
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,18 +17,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import {
   BottomSheetModal,
+  BottomSheetBackdrop,
   BottomSheetScrollView,
   BottomSheetTextInput,
-  BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
 import { AF } from '../../lib/authTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { router } from 'expo-router';
 import { CountryPicker, COUNTRIES, Country } from '../../components/auth/CountryPicker';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
@@ -67,15 +75,204 @@ type Location = {
   type: string;
 };
 
-type AppPopup = {
-  type: 'success' | 'error' | 'warning' | 'confirm';
-  title?: string;
-  message: string;
-  onConfirm?: () => void;
-  confirmText?: string;
-  onCancel?: () => void;
-  cancelText?: string;
+type BookingStatus = 'form' | 'loading' | 'success' | 'error';
+
+// ── Theme Colors ──────────────────────────────────────────────────────────────────
+
+const THEME = {
+  primary: '#305c5d',
+  accent: '#dabf7e',
+  background: '#ede6df',
+  card: '#fbf6f4',
+  white: '#fff',
+  success: '#305c5d',
+  error: '#c45c4a',
+  warning: '#b8956a',
+  text: '#000',
+  textSecondary: '#666',
+  lightGray: '#f5f5f5',
 };
+
+// ── Shimmer Skeleton Component ───────────────────────────────────────────────────
+
+const Shimmer = memo(({ width = '100%', height = 16, borderRadius = 4, style }: any) => {
+  const translateX = useSharedValue(-SCREEN_WIDTH);
+  const [isActive, setIsActive] = useState(true);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    translateX.value = withRepeat(
+      withTiming(SCREEN_WIDTH, { duration: 1500, easing: Easing.ease }),
+      -1,
+      false
+    );
+
+    return () => {
+      setIsActive(false);
+    };
+  }, [isActive]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View style={[{ width, height, borderRadius, backgroundColor: '#e6dfd8', overflow: 'hidden' }, style]}>
+      <Animated.View style={[{ width: '100%', height: '100%' }, animatedStyle]}>
+        <View style={{ width: SCREEN_WIDTH, height: '100%', backgroundColor: 'transparent' }}>
+          <View
+            style={{
+              width: 100,
+              height: '100%',
+              backgroundColor: 'rgba(255,255,255,0.5)',
+              shadowColor: '#fff',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.8,
+              shadowRadius: 20,
+            }}
+          />
+        </View>
+      </Animated.View>
+    </View>
+  );
+});
+
+// ── Modern Cab Card Skeleton ─────────────────────────────────────────────────────
+
+const CabCardSkeleton = memo(() => {
+  const cardWidth = (SCREEN_WIDTH - 52) / 2;
+
+  return (
+    <View style={[skeletonStyles.card, { width: cardWidth }]}>
+      <View style={skeletonStyles.imageContainer}>
+        <Shimmer width="100%" height="100%" borderRadius={16} />
+      </View>
+      <View style={skeletonStyles.infoContainer}>
+        <Shimmer width="80%" height={14} borderRadius={4} style={{ marginBottom: 8 }} />
+        <Shimmer width="60%" height={12} borderRadius={4} style={{ marginBottom: 10 }} />
+        <View style={{ gap: 4, marginBottom: 10, flexDirection: 'row' }}>
+          <Shimmer width={30} height={14} borderRadius={4} />
+          <Shimmer width={30} height={14} borderRadius={4} />
+          <Shimmer width={30} height={14} borderRadius={4} />
+        </View>
+        <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0' }}>
+          <Shimmer width={50} height={18} borderRadius={4} />
+        </View>
+      </View>
+    </View>
+  );
+});
+
+const skeletonStyles = StyleSheet.create({
+  card: {
+    backgroundColor: THEME.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  imageContainer: {
+    width: '100%',
+    height: 85,
+    backgroundColor: '#F8F9FA',
+    padding: 10,
+  },
+  infoContainer: {
+    padding: 10,
+    paddingTop: 12,
+  },
+});
+
+// ── Skeleton Loader Container Component ───────────────────────────────────────────
+
+interface SkeletonLoaderProps {
+  count?: number;
+  loading: boolean;
+  children: React.ReactNode;
+}
+
+const CabSkeletonLoader = memo(({ count = 4, loading, children }: SkeletonLoaderProps) => {
+  if (!loading) return <>{children}</>;
+
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 12, justifyContent: 'space-between' }}>
+      {Array.from({ length: count }).map((_, index) => (
+        <CabCardSkeleton key={index} />
+      ))}
+    </View>
+  );
+});
+
+// ── Animated Status Icon Component ────────────────────────────────────────────────
+
+const AnimatedStatusIcon = memo(({ status }: { status: 'success' | 'error' }) => {
+  const scale = useSharedValue(0);
+  const rotation = useSharedValue(0);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    scale.value = withSpring(1, { damping: 12, stiffness: 100 });
+    opacity.value = withTiming(1, { duration: 300 });
+
+    if (status === 'success') {
+      rotation.value = withSequence(
+        withTiming(-10, { duration: 100 }),
+        withTiming(10, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      );
+    } else {
+      rotation.value = withSequence(
+        withTiming(-15, { duration: 50 }),
+        withTiming(15, { duration: 50 }),
+        withTiming(-15, { duration: 50 }),
+        withTiming(15, { duration: 50 }),
+        withTiming(0, { duration: 50 })
+      );
+    }
+  }, [status]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { rotate: `${rotation.value}deg` }
+    ],
+    opacity: opacity.value,
+  }));
+
+  const circleColor = status === 'success' ? THEME.success : THEME.error;
+  const iconName = status === 'success' ? 'checkmark' : 'close';
+  const iconColor = THEME.white;
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          backgroundColor: circleColor,
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: circleColor,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.4,
+          shadowRadius: 16,
+          elevation: 10,
+        },
+        animatedStyle,
+      ]}
+    >
+      <Ionicons name={iconName} size={56} color={iconColor} />
+    </Animated.View>
+  );
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -102,92 +299,221 @@ const FILTERS = [
 
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
-// FIX: Skeleton exactly matches CabCard dimensions
-const CabSkeleton = () => (
-  <View style={[s.card, { maxWidth: (SCREEN_WIDTH - 56) / 2 }]}>
-    <View style={s.cardImageContainer}>
-      <View style={[s.skeletonPulse, { width: '100%', height: '100%' }]} />
-      {/* Price tag skeleton */}
-      <View style={[s.skeletonPulse, { position: 'absolute', top: 10, left: 10, width: 70, height: 26, borderRadius: 8, backgroundColor: '#305c5d' }]} />
-    </View>
-    <View style={s.cardInfo}>
-      {/* Brand/Model line */}
-      <View style={[s.skeletonLine, s.skeletonPulse, { width: '85%', height: 16, marginBottom: 6 }]} />
-      {/* Rating + Driver row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 6 }}>
-        <View style={[s.skeletonLine, s.skeletonPulse, { width: 40, height: 12 }]} />
-        <View style={[s.skeletonLine, s.skeletonPulse, { width: 80, height: 12 }]} />
-      </View>
-      {/* Tags */}
-      <View style={{ flexDirection: 'row', gap: 4 }}>
-        <View style={[s.skeletonBtn, s.skeletonPulse, { width: 55, height: 18 }]} />
-        <View style={[s.skeletonBtn, s.skeletonPulse, { width: 35, height: 18 }]} />
-      </View>
-    </View>
-  </View>
-);
-
 const RentalCard = memo(({ item }: { item: Rental }) => (
-  <TouchableOpacity style={s.rentalCard} activeOpacity={0.8}>
+  <TouchableOpacity style={rentalStyles.card} activeOpacity={0.8}>
     <Image
       source={{ uri: item.image || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2' }}
-      style={s.rentalImg}
+      style={rentalStyles.img}
       contentFit="cover"
     />
-    <View style={s.rentalBody}>
-      <Text style={[s.rentalName, { fontFamily: AF.bold }]} numberOfLines={1}>{item.name}</Text>
-      <Text style={[s.rentalProp, { fontFamily: AF.medium }]}>
-        {item.transmission || 'Auto'} • <Ionicons name="star" color="#dabf7e" size={12} /> {item.rating || '4.5'}
+    <View style={rentalStyles.body}>
+      <Text style={[rentalStyles.name, { fontFamily: AF.bold }]} numberOfLines={1}>{item.name}</Text>
+      <Text style={[rentalStyles.prop, { fontFamily: AF.medium }]}>
+        {item.transmission || 'Auto'} • <Ionicons name="star" color={THEME.accent} size={12} /> {item.rating || '4.5'}
       </Text>
-      <View style={s.rentalFooter}>
-        <Text style={[s.rentalPrice, { fontFamily: AF.bold }]}>₹{item.price_per_day}/day</Text>
-        <TouchableOpacity style={s.rentBtn} activeOpacity={0.8}>
-          <Text style={[s.rentBtnText, { fontFamily: AF.bold }]}>Rent Now</Text>
+      <View style={rentalStyles.footer}>
+        <Text style={[rentalStyles.price, { fontFamily: AF.bold }]}>₹{item.price_per_day}/day</Text>
+        <TouchableOpacity style={rentalStyles.btn} activeOpacity={0.8}>
+          <Text style={[rentalStyles.btnText, { fontFamily: AF.bold }]}>Rent Now</Text>
         </TouchableOpacity>
       </View>
     </View>
   </TouchableOpacity>
 ));
 
-const CabCard = memo(({ item, index, onSelect }: { item: Cab; index: number; onSelect: (cab: Cab) => void }) => (
-  <Animated.View entering={FadeInDown.delay(index * 50).duration(400)} style={[s.card, { maxWidth: (SCREEN_WIDTH - 56) / 2 }]}>
-    <TouchableOpacity
-      style={{ flex: 1 }}
-      onPress={() => onSelect(item)}
-      activeOpacity={0.9}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+const rentalStyles = StyleSheet.create({
+  card: {
+    width: 200,
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: THEME.white,
+    marginRight: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  img: { width: '100%', height: 120, backgroundColor: THEME.background },
+  body: { padding: 12 },
+  name: { fontSize: 16, color: THEME.text, marginBottom: 4 },
+  prop: { fontSize: 13, color: '#666', marginBottom: 12 },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  price: { fontSize: 14, color: THEME.primary },
+  btn: { backgroundColor: THEME.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  btnText: { color: THEME.white, fontSize: 12 },
+});
+
+// ── Modern Cab Card ─────────────────────────────────────────────────────────────
+
+const CabCard = memo(({ item, index, onSelect }: { item: Cab; index: number; onSelect: (cab: Cab) => void }) => {
+  const cardWidth = (SCREEN_WIDTH - 52) / 2;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 50).duration(400)}
+      style={[cabStyles.card, { width: cardWidth }]}
     >
-      <View style={s.cardImageContainer}>
-        <Image
-          source={getVehicleImage(item.vehicle_type, item.vehicle_image)}
-          style={s.cardImage}
-          contentFit="contain"
-        />
-        <View style={s.cardPriceTag}>
-          <Text style={[s.cardPriceText, { fontFamily: AF.bold }]}>₹{item.price_per_km}/km</Text>
+      <TouchableOpacity
+        style={{ flex: 1 }}
+        onPress={() => onSelect(item)}
+        activeOpacity={0.9}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        {/* Clean Image Container */}
+        <View style={cabStyles.imageContainer}>
+          <Image
+            source={getVehicleImage(item.vehicle_type, item.vehicle_image)}
+            style={cabStyles.cardImage}
+            contentFit="contain"
+          />
         </View>
-      </View>
-      <View style={s.cardInfo}>
-        <Text style={[s.cardName, { fontFamily: AF.bold }]} numberOfLines={1}>
-          {item.vehicle_brand} {item.vehicle_model}
-        </Text>
-        <View style={s.cardMetaRow}>
-          <View style={s.cardRatingBox}>
-            <Ionicons name="star" size={10} color="#dabf7e" />
-            <Text style={[s.cardRatingText, { fontFamily: AF.medium }]}>{item.rating}</Text>
-          </View>
-          <Text style={[s.cardDriverName, { fontFamily: AF.regular }]} numberOfLines={1}>
-            • {item.driver_name}
+
+        {/* Modern Info Section */}
+        <View style={cabStyles.infoContainer}>
+          {/* Brand & Model */}
+          <Text style={[cabStyles.brandText, { fontFamily: AF.bold }]} numberOfLines={1}>
+            {item.vehicle_brand} <Text style={{ fontFamily: AF.medium, color: '#666' }}>{item.vehicle_model}</Text>
           </Text>
+
+          {/* Driver & Rating Row */}
+          <View style={cabStyles.metaRow}>
+            <View style={cabStyles.ratingBadge}>
+              <Ionicons name="star" size={10} color={THEME.white} />
+              <Text style={[cabStyles.ratingText, { fontFamily: AF.semibold }]}>{item.rating}</Text>
+            </View>
+            <Text style={[cabStyles.driverText, { fontFamily: AF.regular }]} numberOfLines={1}>
+              {item.driver_name}
+            </Text>
+          </View>
+
+          {/* Features Tags */}
+          <View style={cabStyles.tagsRow}>
+            <View style={cabStyles.tag}>
+              <Ionicons name="people-outline" size={10} color="#555" />
+              <Text style={[cabStyles.tagText, { fontFamily: AF.medium }]}>{item.seats}</Text>
+            </View>
+            {item.ac_available && (
+              <View style={cabStyles.tag}>
+                <Ionicons name="snow-outline" size={10} color="#555" />
+                <Text style={[cabStyles.tagText, { fontFamily: AF.medium }]}>AC</Text>
+              </View>
+            )}
+            <View style={cabStyles.tag}>
+              <Ionicons name="briefcase-outline" size={10} color="#555" />
+              <Text style={[cabStyles.tagText, { fontFamily: AF.medium }]}>Luggage</Text>
+            </View>
+          </View>
+
+          {/* Price Section - Now in details */}
+          <View style={cabStyles.priceSection}>
+            <Text style={[cabStyles.priceText, { fontFamily: AF.bold }]}>
+              ₹{item.price_per_km}
+            </Text>
+            <Text style={[cabStyles.priceUnit, { fontFamily: AF.regular }]}>/km</Text>
+          </View>
         </View>
-        <View style={s.cardTags}>
-          <View style={s.smallTag}><Text style={s.smallTagText}>{item.seats} Seats</Text></View>
-          {item.ac_available && <View style={s.smallTag}><Text style={s.smallTagText}>AC</Text></View>}
-        </View>
-      </View>
-    </TouchableOpacity>
-  </Animated.View>
-));
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+const cabStyles = StyleSheet.create({
+  card: {
+    backgroundColor: THEME.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  imageContainer: {
+    width: '100%',
+    height: 85,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  infoContainer: {
+    padding: 10,
+    paddingTop: 12,
+  },
+  brandText: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 6,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  ratingText: {
+    fontSize: 10,
+    color: THEME.white,
+  },
+  driverText: {
+    fontSize: 11,
+    color: '#888',
+    flex: 1,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  tagText: {
+    fontSize: 9,
+    color: '#555',
+  },
+  priceSection: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  priceText: {
+    fontSize: 18,
+    color: '#1A1A1A',
+  },
+  priceUnit: {
+    fontSize: 12,
+    color: '#888',
+    marginLeft: 2,
+  },
+});
 
 // ── Main Component ──────────────────────────────────────────────────────────────
 
@@ -215,7 +541,9 @@ export default function CabsScreen() {
   const [selectedCab, setSelectedCab] = useState<Cab | null>(null);
   const [mockDistance, setMockDistance] = useState(10);
   const [isOpeningSheet, setIsOpeningSheet] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookingStatus, setBookingStatus] = useState<BookingStatus>('form');
+  const [bookingRef, setBookingRef] = useState('');
+  const [bookingError, setBookingError] = useState('');
 
   // Booking form fields
   const [bName, setBName] = useState('');
@@ -225,9 +553,20 @@ export default function CabsScreen() {
   const [bDrop, setBDrop] = useState('');
   const [bReq, setBReq] = useState('');
   const [bCountry, setBCountry] = useState<Country>(COUNTRIES[0]);
+  const [phoneError, setPhoneError] = useState('');
 
-  // Popup state
-  const [appPopup, setAppPopup] = useState<AppPopup | null>(null);
+  const sheetSnapPoints = useMemo(() => {
+    if (bookingStatus === 'success' || bookingStatus === 'error') {
+      return ['50%'];
+    }
+    return ['90%'];
+  }, [bookingStatus]);
+
+  useEffect(() => {
+    if (bookingStatus === 'success' || bookingStatus === 'error') {
+      bottomSheetRef.current?.snapToIndex(0);
+    }
+  }, [bookingStatus]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -289,6 +628,10 @@ export default function CabsScreen() {
   // ── Derived data ──────────────────────────────────────────────────────────────
 
   const filteredCabs = useMemo(() => {
+    if (!pickup.trim() && !drop.trim()) {
+      return [];
+    }
+
     let result = cabs;
 
     if (activeFilter !== 'All') {
@@ -340,31 +683,16 @@ export default function CabsScreen() {
   // ── Booking logic ─────────────────────────────────────────────────────────────
 
   const onSelectCab = useCallback((cab: Cab) => {
-    // FIX: Dismiss keyboard and clear focus immediately so first tap works
     Keyboard.dismiss();
     setPickupFocus(false);
     setDropFocus(false);
 
     if (!pickup.trim() || !drop.trim()) {
-      setAppPopup({
-        type: 'warning',
-        title: 'Search Required',
-        message: 'Please enter both Pickup and Drop locations to book a cab.',
-        confirmText: 'Got it',
-      });
       return;
     }
 
     if (!session?.user?.id) {
-      setAppPopup({
-        type: 'warning',
-        title: 'Login Required',
-        message: 'Please log in to book a ride.',
-        onConfirm: () => router.push('/(auth)/index' as any),
-        confirmText: 'Log In',
-        onCancel: () => setAppPopup(null),
-        cancelText: 'Cancel',
-      });
+      router.push('/(auth)/index' as any);
       return;
     }
 
@@ -374,6 +702,9 @@ export default function CabsScreen() {
     setMockDistance(Math.floor(Math.random() * 15) + 5);
     setBPickup(pickup);
     setBDrop(drop);
+    setBookingStatus('form');
+    setBookingRef('');
+    setBookingError('');
 
     const meta = session.user.user_metadata || {};
     setBName(meta.name || '');
@@ -390,6 +721,8 @@ export default function CabsScreen() {
     }
     setBCountry(matchedCountry);
     setBPhone(phoneStr);
+    setPhoneError('');
+    setBReq('');
 
     setTimeout(() => {
       bottomSheetRef.current?.present();
@@ -399,41 +732,31 @@ export default function CabsScreen() {
 
   const submitBooking = useCallback(() => {
     if (!selectedCab) return;
-    if (!bName || !bPhone || !bPickup || !bDrop) {
-      setAppPopup({
-        type: 'error',
-        title: 'Missing Info',
-        message: 'Please fill in all required fields.',
-        confirmText: 'Dismiss',
-      });
+    
+    setPhoneError('');
+    let hasError = false;
+
+    if (!bPhone || bPhone.trim().length < 8) {
+      setPhoneError('Please enter a valid phone number');
+      hasError = true;
+    }
+
+    if (!bName || !bPickup || !bDrop || hasError) {
       return;
     }
 
-    setAppPopup({
-      type: 'confirm',
-      title: 'Confirm Booking',
-      message: `Cab: ${selectedCab.vehicle_brand} ${selectedCab.vehicle_model}\nFrom: ${bPickup}\nTo: ${bDrop}\nPhone: ${bCountry.dial}${bPhone}`,
-      onConfirm: () => {
-        setAppPopup(null);
-        executeBooking();
-      },
-      confirmText: 'Confirm & Book',
-      onCancel: () => setAppPopup(null),
-      cancelText: 'Edit',
-    });
+    executeBooking();
   }, [selectedCab, bName, bPhone, bPickup, bDrop, bCountry]);
 
-  // FIX: Handle clients table FK constraint and missing columns gracefully
   const executeBooking = async () => {
     if (!selectedCab || !session?.user?.id) return;
-    setIsSubmitting(true);
+    setBookingStatus('loading');
 
     const totalFare = selectedCab.price_per_km * mockDistance;
-    const bookingRef = `CAB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const newBookingRef = `CAB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    setBookingRef(newBookingRef);
 
     try {
-      // Try to upsert to clients table (required for FK constraint)
-      // Using minimal fields to avoid column not found errors
       const { error: clientError } = await supabase
         .from('clients')
         .upsert({
@@ -445,7 +768,6 @@ export default function CabsScreen() {
 
       if (clientError) {
         console.error('Client upsert error:', clientError);
-        // If specific column error, try bare minimum insert
         if (clientError.code === 'PGRST204' || clientError.message.includes('column')) {
           const { error: insertError } = await supabase
             .from('clients')
@@ -456,7 +778,6 @@ export default function CabsScreen() {
               phone: `${bCountry.dial}${bPhone}`,
             });
 
-          // Ignore duplicate key errors (user already exists)
           if (insertError && !insertError.message.includes('duplicate') && !insertError.message.includes('23505')) {
             throw new Error(`Client creation failed: ${insertError.message}`);
           }
@@ -465,13 +786,12 @@ export default function CabsScreen() {
         }
       }
 
-      // Proceed with booking
       const { error: bookingError } = await supabase.from('bookings').insert({
         client_id: session.user.id,
         purpose: 'Cab Booking',
         status: 'pending',
         details: {
-          booking_reference: bookingRef,
+          booking_reference: newBookingRef,
           passenger_name: bName,
           passenger_phone: `${bCountry.dial}${bPhone}`,
           pickup_address: bPickup,
@@ -484,6 +804,7 @@ export default function CabsScreen() {
           price_per_km: selectedCab.price_per_km,
           estimated_distance_km: mockDistance,
           total_fare: totalFare,
+          special_request: bReq.trim() || undefined,
         },
       });
 
@@ -492,55 +813,57 @@ export default function CabsScreen() {
       await supabase.from('notifications').insert({
         user_id: session.user.id,
         title: 'Booking Confirmed!',
-        message: `Your ${selectedCab.vehicle_brand} ${selectedCab.vehicle_model} booking is being processed. Ref: ${bookingRef}`,
+        message: `Your ${selectedCab.vehicle_brand} ${selectedCab.vehicle_model} booking is being processed. Ref: ${newBookingRef}`,
         path: '/(main)/bookings',
       });
 
-      bottomSheetRef.current?.dismiss();
-      setPickup('');
-      setDrop('');
-      setAppPopup({
-        type: 'success',
-        title: 'Booking Confirmed!',
-        message: `Your reference: ${bookingRef}`,
-        confirmText: 'Done',
-      });
+      setBookingStatus('success');
     } catch (error: any) {
-      const errMsg = error.message || 'Something went wrong.';
       console.error('Booking error:', error);
-      setAppPopup({ type: 'error', title: 'Booking Failed', message: errMsg, confirmText: 'Dismiss' });
+      console.error('Error details:', error.message || 'Unknown error');
 
-      await supabase.from('notifications').insert({
-        user_id: session.user.id,
-        title: 'Booking Failed',
-        message: `Could not process your cab booking. Reason: ${errMsg}`,
-        path: '/(main)/cabs',
-      });
-    } finally {
-      setIsSubmitting(false);
+      setBookingStatus('error');
+      setBookingError('Something went wrong. Please try again.');
     }
   };
+
+  const handleGoBack = useCallback(() => {
+    setBookingStatus('form');
+    setBookingError('');
+  }, []);
+
+  const handleCloseSheet = useCallback(() => {
+    bottomSheetRef.current?.dismiss();
+    if (bookingStatus === 'success') {
+      setPickup('');
+      setDrop('');
+    }
+    setTimeout(() => {
+      setBookingStatus('form');
+      setBookingError('');
+    }, 300);
+  }, [bookingStatus]);
 
   // ── Render helpers ────────────────────────────────────────────────────────────
 
   const renderHeader = () => (
     <View>
-      <View style={s.topBar}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={24} color={THEME.text} />
         </TouchableOpacity>
-        <View style={s.headerTitleWrap}>
-          <Text style={[s.headerSubtitle, { fontFamily: AF.medium }]}>Your Ride Awaits</Text>
-          <Text style={[s.headerTitle, { fontFamily: AF.playfairBold }]}>Book a Cab</Text>
+        <View style={styles.headerTitleWrap}>
+          <Text style={[styles.headerSubtitle, { fontFamily: AF.medium }]}>Your Ride Awaits</Text>
+          <Text style={[styles.headerTitle, { fontFamily: AF.playfairBold }]}>Book a Cab</Text>
         </View>
       </View>
 
-      <View style={s.formCard}>
+      <View style={styles.formCard}>
         {/* Pickup */}
-        <View style={s.inputRow}>
-          <View style={s.iconWrap}><Ionicons name="location-outline" size={20} color="#305c5d" /></View>
+        <View style={styles.inputRow}>
+          <View style={styles.iconWrap}><Ionicons name="location-outline" size={20} color={THEME.primary} /></View>
           <TextInput
-            style={[s.input, { fontFamily: AF.medium }]}
+            style={[styles.input, { fontFamily: AF.medium }]}
             placeholder="Pickup Location"
             placeholderTextColor="#999"
             value={pickup}
@@ -555,30 +878,30 @@ export default function CabsScreen() {
         </View>
 
         {pickupFocus && filteredPickupLocs.length > 0 && (
-          <View style={s.suggestionsBox}>
+          <View style={styles.suggestionsBox}>
             {filteredPickupLocs.map(loc => (
               <TouchableOpacity
                 key={loc.id}
-                style={s.suggItem}
+                style={styles.suggItem}
                 onPress={() => { setPickup(loc.name); setPickupFocus(false); Keyboard.dismiss(); }}
               >
                 <Ionicons name="location" size={16} color="#bbb" />
                 <View style={{ marginLeft: 8 }}>
-                  <Text style={[s.suggName, { fontFamily: AF.medium }]}>{loc.name}</Text>
-                  <Text style={[s.suggDesc, { fontFamily: AF.regular }]}>{loc.district} • {loc.type}</Text>
+                  <Text style={[styles.suggName, { fontFamily: AF.medium }]}>{loc.name}</Text>
+                  <Text style={[styles.suggDesc, { fontFamily: AF.regular }]}>{loc.district} • {loc.type}</Text>
                 </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        <View style={s.formDivider} />
+        <View style={styles.formDivider} />
 
         {/* Drop */}
-        <View style={s.inputRow}>
-          <View style={s.iconWrap}><Ionicons name="location" size={20} color="#f44336" /></View>
+        <View style={styles.inputRow}>
+          <View style={styles.iconWrap}><Ionicons name="location" size={20} color="#f44336" /></View>
           <TextInput
-            style={[s.input, { fontFamily: AF.medium }]}
+            style={[styles.input, { fontFamily: AF.medium }]}
             placeholder="Drop Location"
             placeholderTextColor="#999"
             value={drop}
@@ -593,17 +916,17 @@ export default function CabsScreen() {
         </View>
 
         {dropFocus && filteredDropLocs.length > 0 && (
-          <View style={s.suggestionsBox}>
+          <View style={styles.suggestionsBox}>
             {filteredDropLocs.map(loc => (
               <TouchableOpacity
                 key={loc.id}
-                style={s.suggItem}
+                style={styles.suggItem}
                 onPress={() => { setDrop(loc.name); setDropFocus(false); Keyboard.dismiss(); }}
               >
                 <Ionicons name="location" size={16} color="#bbb" />
                 <View style={{ marginLeft: 8 }}>
-                  <Text style={[s.suggName, { fontFamily: AF.medium }]}>{loc.name}</Text>
-                  <Text style={[s.suggDesc, { fontFamily: AF.regular }]}>{loc.district} • {loc.type}</Text>
+                  <Text style={[styles.suggName, { fontFamily: AF.medium }]}>{loc.name}</Text>
+                  <Text style={[styles.suggDesc, { fontFamily: AF.regular }]}>{loc.district} • {loc.type}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -611,32 +934,32 @@ export default function CabsScreen() {
         )}
 
         {/* Vehicle type filters */}
-        <View style={s.filterInnerTitleRow}>
-          <Text style={[s.filterInnerTitle, { fontFamily: AF.bold }]}>Select Vehicle Type</Text>
-          <TouchableOpacity style={s.showMoreBtn} onPress={() => setShowMoreFilters(!showMoreFilters)}>
-            <Text style={[s.showMoreText, { fontFamily: AF.semibold }]}>
+        <View style={styles.filterInnerTitleRow}>
+          <Text style={[styles.filterInnerTitle, { fontFamily: AF.bold }]}>Select Vehicle Type</Text>
+          <TouchableOpacity style={styles.showMoreBtn} onPress={() => setShowMoreFilters(!showMoreFilters)}>
+            <Text style={[styles.showMoreText, { fontFamily: AF.semibold }]}>
               {showMoreFilters ? 'Show Less' : 'Show More'}
             </Text>
-            <Ionicons name={showMoreFilters ? 'chevron-up' : 'chevron-down'} size={14} color="#305c5d" style={{ marginLeft: 4 }} />
+            <Ionicons name={showMoreFilters ? 'chevron-up' : 'chevron-down'} size={14} color={THEME.primary} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
 
-        <View style={s.filterGrid}>
+        <View style={styles.filterGrid}>
           {FILTERS.slice(0, showMoreFilters ? FILTERS.length : 4).map((item) => (
             <TouchableOpacity
               key={item.label}
               style={[
-                s.filterChip,
-                activeFilter === item.label && s.filterChipActive,
+                styles.filterChip,
+                activeFilter === item.label && styles.filterChipActive,
                 { width: '23%', marginHorizontal: '1%', marginBottom: 16 },
               ]}
               activeOpacity={0.8}
               onPress={() => setActiveFilter(item.label)}
             >
-              {item.image && <Image source={item.image} style={s.filterChipImg} contentFit="contain" />}
+              {item.image && <Image source={item.image} style={styles.filterChipImg} contentFit="contain" />}
               <Text
                 numberOfLines={1}
-                style={[s.filterChipText, activeFilter === item.label && s.filterChipTextActive, { fontFamily: AF.semibold, fontSize: 10 }]}
+                style={[styles.filterChipText, activeFilter === item.label && styles.filterChipTextActive, { fontFamily: AF.semibold, fontSize: 10 }]}
               >
                 {item.label}
               </Text>
@@ -645,35 +968,47 @@ export default function CabsScreen() {
         </View>
       </View>
 
-      <View style={s.sectionHeader}>
-        <Text style={[s.sectionTitle, { fontFamily: AF.bold }]}>Available Cabs</Text>
-        <Text style={[s.sectionCount, { fontFamily: AF.medium }]}>{filteredCabs.length} Total</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { fontFamily: AF.bold }]}>Available Cabs</Text>
+        <Text style={[styles.sectionCount, { fontFamily: AF.medium }]}>{filteredCabs.length} Total</Text>
       </View>
     </View>
   );
 
   const renderEmpty = () => {
-    if (loading) {
+    if (!pickup.trim() && !drop.trim()) {
       return (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 16 }}>
-          {[1, 2, 3, 4].map((k) => <CabSkeleton key={k} />)}
+        <View style={styles.emptyState}>
+          <Ionicons name="search-outline" size={48} color={THEME.primary} />
+          <Text style={[styles.emptyStateText, { fontFamily: AF.medium, textAlign: 'center', paddingHorizontal: 40 }]}>
+            Search for your cabs from your nearest location
+          </Text>
         </View>
       );
     }
+
+    if (loading) {
+      return (
+        <CabSkeletonLoader loading={true} count={4}>
+          <></>
+        </CabSkeletonLoader>
+      );
+    }
+
     return (
-      <View style={s.emptyState}>
+      <View style={styles.emptyState}>
         <Ionicons name="car-outline" size={48} color="#ccc" />
-        <Text style={[s.emptyStateText, { fontFamily: AF.medium }]}>No cabs match your filters.</Text>
+        <Text style={[styles.emptyStateText, { fontFamily: AF.medium }]}>No cabs match your filters.</Text>
       </View>
     );
   };
 
   const renderFooter = () => (
-    <View style={s.rentalContainer}>
-      <View style={s.sectionHeader}>
-        <Text style={[s.sectionTitle, { fontFamily: AF.bold }]}>Self-Drive Rentals</Text>
+    <View style={styles.rentalContainer}>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { fontFamily: AF.bold }]}>Self-Drive Rentals</Text>
         <TouchableOpacity onPress={() => router.push('/(main)/rentals' as any)}>
-          <Text style={[s.viewAllLink, { fontFamily: AF.semibold }]}>View All</Text>
+          <Text style={[styles.viewAllLink, { fontFamily: AF.semibold }]}>View All</Text>
         </TouchableOpacity>
       </View>
       {rentals.length > 0 ? (
@@ -683,277 +1018,632 @@ export default function CabsScreen() {
           keyExtractor={(item) => item.id}
           showsHorizontalScrollIndicator={false}
           renderItem={({ item }) => <RentalCard item={item} />}
-          contentContainerStyle={s.rentalListContent}
+          contentContainerStyle={styles.rentalListContent}
         />
       ) : (
-        <Text style={[s.noRentalsText, { fontFamily: AF.medium }]}>No rental vehicles available.</Text>
+        <Text style={[styles.noRentalsText, { fontFamily: AF.medium }]}>No rental vehicles available.</Text>
       )}
       <View style={{ height: 120 }} />
     </View>
   );
 
-  // ── Popup helpers ─────────────────────────────────────────────────────────────
+  // ── Render Sheet Content ──────────────────────────────────────────────────────
 
-  const popupIconName = (type: AppPopup['type']) => {
-    if (type === 'success') return 'checkmark-circle';
-    if (type === 'error') return 'alert-circle';
-    if (type === 'warning') return 'warning';
-    return 'information-circle';
-  };
+  const renderSheetContent = () => {
+    if (!selectedCab) return null;
 
-  const popupColor = (type: AppPopup['type']) => {
-    if (type === 'success') return '#4CAF50';
-    if (type === 'error') return '#f44336';
-    if (type === 'warning') return '#ff9800';
-    return '#305c5d';
+    // Loading State
+    if (bookingStatus === 'loading') {
+      return (
+        <View style={sheetStyles.statusContainer}>
+          <ActivityIndicator size="large" color={THEME.primary} />
+          <Text style={[sheetStyles.statusText, { fontFamily: AF.medium }]}>Confirming your booking...</Text>
+        </View>
+      );
+    }
+
+    // Success State
+    if (bookingStatus === 'success') {
+      return (
+        <Animated.View entering={FadeInDown.springify().mass(0.7)} style={sheetStyles.statusContainer}>
+          <TouchableOpacity onPress={handleCloseSheet} style={sheetStyles.closeIconBtn}>
+            <Ionicons name="close" size={24} color={THEME.textSecondary} />
+          </TouchableOpacity>
+          <AnimatedStatusIcon status="success" />
+          <Text style={[sheetStyles.statusTitle, { fontFamily: AF.bold, color: THEME.success }]}>
+            Booking Confirmed!
+          </Text>
+          <Text style={[sheetStyles.statusSubtitle, { fontFamily: AF.medium }]}>
+            Reference: {bookingRef}
+          </Text>
+          <View style={sheetStyles.statusButtons}>
+            <TouchableOpacity
+              style={[sheetStyles.statusBtn, { backgroundColor: THEME.primary }]}
+              onPress={handleCloseSheet}
+            >
+              <Text style={[sheetStyles.statusBtnText, { fontFamily: AF.bold, color: THEME.accent }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      );
+    }
+
+    // Error State
+    if (bookingStatus === 'error') {
+      return (
+        <Animated.View entering={FadeInDown.springify().mass(0.7)} style={sheetStyles.statusContainer}>
+          <TouchableOpacity onPress={handleCloseSheet} style={sheetStyles.closeIconBtn}>
+            <Ionicons name="close" size={24} color={THEME.textSecondary} />
+          </TouchableOpacity>
+          <AnimatedStatusIcon status="error" />
+          <Text style={[sheetStyles.statusTitle, { fontFamily: AF.bold, color: THEME.error }]}>
+            Booking Failed
+          </Text>
+          <Text style={[sheetStyles.statusSubtitle, { fontFamily: AF.medium }]}>
+            {bookingError}
+          </Text>
+          <View style={sheetStyles.statusButtons}>
+            <TouchableOpacity
+              style={[sheetStyles.statusBtnSecondary, { borderColor: THEME.error }]}
+              onPress={handleGoBack}
+            >
+              <Text style={[sheetStyles.statusBtnTextSecondary, { fontFamily: AF.medium, color: THEME.error }]}>
+                Go Back
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[sheetStyles.statusBtn, { backgroundColor: THEME.error }]}
+              onPress={executeBooking}
+            >
+              <Text style={[sheetStyles.statusBtnText, { fontFamily: AF.bold, color: THEME.white }]}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      );
+    }
+
+    // Form State (default)
+    return (
+      <BottomSheetScrollView 
+        contentContainerStyle={sheetStyles.formContainer}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={sheetStyles.sheetHeader}>
+          <Text style={[sheetStyles.sheetTitle, { fontFamily: AF.bold }]}>Complete Booking</Text>
+          <TouchableOpacity onPress={() => bottomSheetRef.current?.dismiss()} style={sheetStyles.sheetCloseBtn}>
+            <Ionicons name="close" size={24} color={THEME.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Journey Summary */}
+        <View style={sheetStyles.journeySummary}>
+          <View style={sheetStyles.dateTimeRow}>
+            <Ionicons name="calendar-outline" size={16} color={THEME.textSecondary} />
+            <Text style={[sheetStyles.dateTimeText, { fontFamily: AF.medium }]}>
+              {new Date().toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </Text>
+          </View>
+          <View style={sheetStyles.journeyLineDivider} />
+          
+          <View style={sheetStyles.journeyRow}>
+            <View style={sheetStyles.journeyDot}>
+              <View style={[sheetStyles.dot, { backgroundColor: THEME.primary }]} />
+            </View>
+            <Text style={[sheetStyles.journeyText, { fontFamily: AF.medium }]} numberOfLines={1}>{bPickup}</Text>
+          </View>
+          <View style={sheetStyles.journeyLine} />
+          <View style={sheetStyles.journeyRow}>
+            <View style={sheetStyles.journeyDot}>
+              <View style={[sheetStyles.dot, { backgroundColor: '#f44336' }]} />
+            </View>
+            <Text style={[sheetStyles.journeyText, { fontFamily: AF.medium }]} numberOfLines={1}>{bDrop}</Text>
+          </View>
+        </View>
+
+        {/* Cab Summary */}
+        <View style={sheetStyles.cabSummary}>
+          <View style={sheetStyles.cabImageWrap}>
+            <Image
+              source={getVehicleImage(selectedCab.vehicle_type, selectedCab.vehicle_image)}
+              style={sheetStyles.cabImage}
+              contentFit="contain"
+            />
+          </View>
+          <View style={sheetStyles.cabDetails}>
+            <Text style={[sheetStyles.cabName, { fontFamily: AF.bold }]}>
+              {selectedCab.vehicle_brand} {selectedCab.vehicle_model}
+            </Text>
+            <Text style={[sheetStyles.cabMeta, { fontFamily: AF.medium }]}>
+              {selectedCab.driver_name} • {selectedCab.rating}★
+            </Text>
+          </View>
+          <View style={sheetStyles.cabPrice}>
+            <Text style={[sheetStyles.priceValue, { fontFamily: AF.bold }]}>
+              ₹{selectedCab.price_per_km * mockDistance}
+            </Text>
+            <Text style={[sheetStyles.priceLabel, { fontFamily: AF.regular }]}>Total</Text>
+          </View>
+        </View>
+
+        {/* Fare Breakdown */}
+        <View style={sheetStyles.fareBreakdown}>
+          <View style={sheetStyles.fareRow}>
+            <Text style={[sheetStyles.fareLabel, { fontFamily: AF.medium }]}>Rate per km</Text>
+            <Text style={[sheetStyles.fareValue, { fontFamily: AF.semibold }]}>₹{selectedCab.price_per_km}</Text>
+          </View>
+          <View style={sheetStyles.fareRow}>
+            <Text style={[sheetStyles.fareLabel, { fontFamily: AF.medium }]}>Distance</Text>
+            <Text style={[sheetStyles.fareValue, { fontFamily: AF.semibold }]}>~{mockDistance} km</Text>
+          </View>
+          <View style={[sheetStyles.fareRow, sheetStyles.fareRowTotal]}>
+            <Text style={[sheetStyles.fareLabel, { fontFamily: AF.bold }]}>Total Fare</Text>
+            <Text style={[sheetStyles.fareValueTotal, { fontFamily: AF.bold }]}>
+              ₹{selectedCab.price_per_km * mockDistance}
+            </Text>
+          </View>
+        </View>
+
+        {/* Passenger Details */}
+        <Text style={[sheetStyles.sectionLabel, { fontFamily: AF.semibold }]}>Passenger Details</Text>
+
+        <View style={sheetStyles.formGroup}>
+          <BottomSheetTextInput
+            style={[sheetStyles.input, { fontFamily: AF.medium }]}
+            placeholder="Full Name"
+            value={bName}
+            editable={false}
+          />
+
+          <View style={sheetStyles.phoneContainer}>
+            <View style={[sheetStyles.phoneRow, phoneError ? sheetStyles.inputError : null]}>
+              <CountryPicker selected={bCountry} onSelect={setBCountry} />
+              <BottomSheetTextInput
+                style={[sheetStyles.phoneInput, { fontFamily: AF.medium }]}
+                placeholder="Phone Number"
+                placeholderTextColor="#aaa"
+                value={bPhone}
+                onChangeText={(text) => {
+                  setBPhone(text);
+                  if (phoneError) setPhoneError('');
+                }}
+                keyboardType="phone-pad"
+              />
+            </View>
+            {phoneError ? (
+              <View style={sheetStyles.errorRow}>
+                <Ionicons name="alert-circle" size={12} color={THEME.error} />
+                <Text style={[sheetStyles.errorText, { fontFamily: AF.medium }]}>{phoneError}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <BottomSheetTextInput
+            style={[sheetStyles.input, { fontFamily: AF.medium }]}
+            placeholder="Email"
+            value={bEmail}
+            editable={false}
+          />
+
+          <BottomSheetTextInput
+            style={[sheetStyles.input, { fontFamily: AF.medium, minHeight: 44 }]}
+            placeholder="Special Requests (e.g. extra luggage)"
+            placeholderTextColor="#aaa"
+            value={bReq}
+            onChangeText={setBReq}
+            maxLength={100}
+          />
+        </View>
+
+        {/* Action Buttons */}
+        <View style={sheetStyles.buttonRow}>
+          <TouchableOpacity
+            style={sheetStyles.backButton}
+            onPress={() => bottomSheetRef.current?.dismiss()}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={18} color={THEME.text} />
+            <Text style={[sheetStyles.backButtonText, { fontFamily: AF.medium }]}>Modify</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[sheetStyles.confirmBtn, { backgroundColor: THEME.primary }]}
+            activeOpacity={0.8}
+            onPress={submitBooking}
+          >
+            <Text style={[sheetStyles.confirmBtnText, { fontFamily: AF.bold, color: THEME.accent }]}>
+              Confirm Booking
+            </Text>
+          </TouchableOpacity>
+        </View>
+        </View>
+      </BottomSheetScrollView>
+    );
   };
 
   // ── JSX ───────────────────────────────────────────────────────────────────────
 
   return (
-    <View style={s.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <FlatList
-        style={s.listStyle}
-        contentContainerStyle={[s.scrollContent, { paddingTop: insets.top + 20 }]}
+        style={styles.listStyle}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
         data={filteredCabs}
         numColumns={2}
-        columnWrapperStyle={s.listRow}
+        columnWrapperStyle={styles.listRow}
         keyExtractor={(item, index) => item.driver_id || index.toString()}
         renderItem={({ item, index }) => <CabCard item={item} index={index} onSelect={onSelectCab} />}
         ListHeaderComponent={renderHeader()}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#305c5d" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       />
 
-      {/* Booking Bottom Sheet */}
+      {/* Fixed Booking Bottom Sheet - 90% height to show all content */}
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing={false}
-        snapPoints={['85%', '95%']}
-        enablePanDownToClose
+        snapPoints={sheetSnapPoints}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        enablePanDownToClose={bookingStatus !== 'loading'}
+        enableContentPanningGesture={false}
+        enableHandlePanningGesture={bookingStatus !== 'loading'}
         backdropComponent={(props) => (
-          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />
+          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior={bookingStatus === 'loading' ? 'none' : 'close'} />
         )}
       >
-        {selectedCab && (
-          <BottomSheetScrollView
-            contentContainerStyle={s.sheetContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Header */}
-            <View style={s.sheetHeader}>
-              <Text style={[s.sheetTitle, { fontFamily: AF.bold }]}>Complete Booking</Text>
-              <TouchableOpacity onPress={() => bottomSheetRef.current?.dismiss()} style={s.sheetCloseBtn}>
-                <Ionicons name="close" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Journey Summary - Compact */}
-            <View style={s.journeySummary}>
-              <View style={s.journeyRow}>
-                <Ionicons name="location-outline" size={16} color="#305c5d" />
-                <Text style={[s.journeyText, { fontFamily: AF.medium }]} numberOfLines={1}>{bPickup}</Text>
-              </View>
-              <View style={s.journeyLine} />
-              <View style={s.journeyRow}>
-                <Ionicons name="location" size={16} color="#f44336" />
-                <Text style={[s.journeyText, { fontFamily: AF.medium }]} numberOfLines={1}>{bDrop}</Text>
-              </View>
-              <View style={s.journeyMeta}>
-                <Text style={[s.journeyMetaText, { fontFamily: AF.medium }]}>
-                  <Ionicons name="calendar-outline" size={12} />{' '}
-                  {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} •{' '}
-                  <Ionicons name="time-outline" size={12} />{' '}
-                  {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            </View>
-
-            {/* Cab summary - Compact */}
-            <View style={s.sheetCabReview}>
-              <View style={s.sheetCabImgWrap}>
-                <Image
-                  source={getVehicleImage(selectedCab.vehicle_type, selectedCab.vehicle_image)}
-                  style={s.sheetCabImg}
-                  contentFit="contain"
-                />
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[s.sheetCabName, { fontFamily: AF.bold }]}>
-                  {selectedCab.vehicle_brand} {selectedCab.vehicle_model}
-                </Text>
-                <Text style={{ fontFamily: AF.medium, color: '#666', fontSize: 13, marginTop: 2 }}>
-                  {selectedCab.driver_name} • {selectedCab.rating}★ • {selectedCab.seats} Seats
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[s.fareValTotal, { fontFamily: AF.bold, fontSize: 16 }]}>
-                  ₹{selectedCab.price_per_km * mockDistance}
-                </Text>
-                <Text style={{ fontSize: 11, color: '#888', fontFamily: AF.medium }}>Total Fare</Text>
-              </View>
-            </View>
-
-            {/* Fare Details - Compact horizontal layout */}
-            <View style={s.fareBoxHorizontal}>
-              <View style={s.fareCol}>
-                <Text style={[s.fareLabel, { fontFamily: AF.medium }]}>Rate</Text>
-                <Text style={[s.fareVal, { fontFamily: AF.semibold }]}>₹{selectedCab.price_per_km}/km</Text>
-              </View>
-              <View style={s.fareDividerVertical} />
-              <View style={s.fareCol}>
-                <Text style={[s.fareLabel, { fontFamily: AF.medium }]}>Distance</Text>
-                <Text style={[s.fareVal, { fontFamily: AF.semibold }]}>~{mockDistance} km</Text>
-              </View>
-              <View style={s.fareDividerVertical} />
-              <View style={s.fareCol}>
-                <Text style={[s.fareLabel, { fontFamily: AF.medium }]}>Total</Text>
-                <Text style={[s.fareVal, { fontFamily: AF.bold, color: '#305c5d' }]}>
-                  ₹{selectedCab.price_per_km * mockDistance}
-                </Text>
-              </View>
-            </View>
-
-            {/* Passenger Details - Compact */}
-            <Text style={[s.formSectionTitle, { fontFamily: AF.semibold }]}>Passenger Details</Text>
-
-            <View style={s.sheetFormGroup}>
-              <BottomSheetTextInput
-                style={[s.sheetInput, { fontFamily: AF.medium, backgroundColor: '#f5f5f5', color: '#888', height: 44 }]}
-                placeholder="Full Name"
-                value={bName}
-                editable={false}
-              />
-
-              {/* Phone input with CountryPicker */}
-              <View style={s.phoneInputWrapper}>
-                <CountryPicker selected={bCountry} onSelect={setBCountry} />
-                <BottomSheetTextInput
-                  style={[s.sheetInputPhone, { fontFamily: AF.medium, height: 44 }]}
-                  placeholder="Phone Number"
-                  placeholderTextColor="#aaa"
-                  value={bPhone}
-                  onChangeText={setBPhone}
-                  keyboardType="phone-pad"
-                />
-              </View>
-
-              <BottomSheetTextInput
-                style={[s.sheetInput, { fontFamily: AF.medium, backgroundColor: '#f5f5f5', color: '#888', height: 44 }]}
-                placeholder="Email"
-                value={bEmail}
-                editable={false}
-              />
-
-              <BottomSheetTextInput
-                style={[s.sheetInput, s.sheetInputMulti, { fontFamily: AF.medium, height: 60 }]}
-                placeholder="Special Request (optional)"
-                placeholderTextColor="#aaa"
-                value={bReq}
-                onChangeText={setBReq}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Confirm Button */}
-            <View style={[s.sheetFooter, { borderTopWidth: 0, paddingBottom: 0, marginTop: 10 }]}>
-              <TouchableOpacity
-                style={s.confirmBtn}
-                activeOpacity={0.8}
-                onPress={submitBooking}
-                disabled={isSubmitting}
-              >
-                {isSubmitting
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={[s.confirmBtnText, { fontFamily: AF.bold }]}>Confirm Booking (Pay Later)</Text>
-                }
-              </TouchableOpacity>
-            </View>
-
-            {/* Gap below to prevent cutoff */}
-            <View style={{ height: 40 }} />
-          </BottomSheetScrollView>
-        )}
+        <View style={sheetStyles.container}>
+          {renderSheetContent()}
+        </View>
       </BottomSheetModal>
 
       {/* Opening sheet loader */}
       {isOpeningSheet && (
-        <View style={s.globalLoader}>
-          <ActivityIndicator size="large" color="#305c5d" />
-          <Text style={[s.loaderText, { fontFamily: AF.medium }]}>Preparing Booking...</Text>
+        <View style={styles.globalLoader}>
+          <ActivityIndicator size="large" color={THEME.primary} />
+          <Text style={[styles.loaderText, { fontFamily: AF.medium, color: THEME.primary }]}>Preparing Booking...</Text>
         </View>
-      )}
-
-      {/* Global popup modal */}
-      {appPopup && (
-        <Modal transparent visible animationType="fade" statusBarTranslucent>
-          <View style={s.modalOverlay}>
-            <View style={[s.modalCard, { borderColor: popupColor(appPopup.type) }]}>
-              <TouchableOpacity
-                style={s.modalClose}
-                onPress={() => { appPopup.onCancel?.(); setAppPopup(null); }}
-              >
-                <Ionicons name="close" size={22} color="#aaa" />
-              </TouchableOpacity>
-
-              <View style={[s.modalIcon, { backgroundColor: `${popupColor(appPopup.type)}18` }]}>
-                <Ionicons name={popupIconName(appPopup.type)} size={36} color={popupColor(appPopup.type)} />
-              </View>
-
-              {appPopup.title && (
-                <Text style={[s.modalTitleText, { fontFamily: AF.bold }]}>{appPopup.title}</Text>
-              )}
-              <Text style={[s.modalText, { fontFamily: AF.medium }]}>{appPopup.message}</Text>
-
-              <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-                {appPopup.onCancel && (
-                  <TouchableOpacity
-                    style={[s.modalBtn, s.modalBtnCancel, { flex: 1 }]}
-                    onPress={() => { appPopup.onCancel!(); setAppPopup(null); }}
-                  >
-                    <Text style={[s.modalBtnText, { color: '#333', fontFamily: AF.medium }]}>
-                      {appPopup.cancelText || 'Cancel'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[
-                    s.modalBtn,
-                    appPopup.onCancel ? { flex: 1.5 } : { width: '100%' },
-                    { backgroundColor: popupColor(appPopup.type) },
-                  ]}
-                  onPress={() => {
-                    if (appPopup.onConfirm) appPopup.onConfirm();
-                    else setAppPopup(null);
-                  }}
-                >
-                  <Text style={[s.modalBtnText, { fontFamily: AF.bold }]}>
-                    {appPopup.confirmText || 'OK'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       )}
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Sheet Styles ───────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#ede6df' },
-  listStyle: { flex: 1 },
-  scrollContent: { paddingBottom: 20 },
+const sheetStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: THEME.white,
+  },
+  formContainer: {
+    flexGrow: 1,
+    padding: 16,
+  },
+  statusContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  closeIconBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: THEME.textSecondary,
+  },
+  statusTitle: {
+    marginTop: 24,
+    fontSize: 24,
+    letterSpacing: -0.5,
+  },
+  statusSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    color: THEME.textSecondary,
+  },
+  statusButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 32,
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  statusBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statusBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    backgroundColor: THEME.card,
+  },
+  statusBtnText: {
+    fontSize: 15,
+  },
+  statusBtnTextSecondary: {
+    fontSize: 15,
+  },
+
+  // Sheet Header
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    color: THEME.text
+  },
+  sheetCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.lightGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Journey Summary
+  journeySummary: {
+    backgroundColor: THEME.card,
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+  },
+  journeyRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  journeyDot: {
+    width: 24,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  journeyText: {
+    fontSize: 14,
+    color: THEME.text,
+    flex: 1,
+    marginLeft: 8,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  journeyLineDivider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginBottom: 8,
+  },
+  journeyLine: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#ddd',
+    marginLeft: 11,
+    marginVertical: 4,
+  },
+
+  // Cab Summary
+  cabSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.white,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  cabImageWrap: {
+    width: 60,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: THEME.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  cabImage: {
+    width: '100%',
+    height: '100%'
+  },
+  cabDetails: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  cabName: {
+    fontSize: 16,
+    color: THEME.text,
+    marginBottom: 4,
+  },
+  cabMeta: {
+    fontSize: 13,
+    color: '#666'
+  },
+  cabPrice: {
+    alignItems: 'flex-end',
+  },
+  priceValue: {
+    fontSize: 20,
+    color: THEME.primary,
+  },
+  priceLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+
+  // Fare Breakdown
+  fareBreakdown: {
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  fareRowTotal: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    marginTop: 4,
+    paddingTop: 8,
+  },
+  fareLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  fareValue: {
+    fontSize: 14,
+    color: THEME.text,
+  },
+  fareValueTotal: {
+    fontSize: 18,
+    color: THEME.primary,
+  },
+
+  // Form
+  sectionLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  formGroup: {
+    marginBottom: 10,
+    gap: 8
+  },
+  input: {
+    backgroundColor: THEME.lightGray,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: THEME.text,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  phoneContainer: {
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.lightGray,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    overflow: 'hidden',
+  },
+  inputError: {
+    borderColor: THEME.error,
+    backgroundColor: '#fffcfc',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+    marginLeft: 4,
+  },
+  errorText: {
+    fontSize: 11,
+    color: THEME.error,
+  },
+  phoneInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: THEME.text,
+  },
+
+  // Buttons
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 'auto',
+    paddingTop: 8,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: THEME.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    gap: 6,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: THEME.text,
+  },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    fontSize: 15,
+  },
+});
+
+// ── Main Styles ─────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: THEME.background
+  },
+  listStyle: {
+    flex: 1
+  },
+  scrollContent: {
+    paddingBottom: 20
+  },
 
   topBar: {
     flexDirection: 'row',
@@ -966,24 +1656,31 @@ const s = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fbf6f4',
+    backgroundColor: THEME.card,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
     marginTop: 4,
   },
-  headerTitleWrap: { flex: 1, marginLeft: 16 },
+  headerTitleWrap: {
+    flex: 1,
+    marginLeft: 16
+  },
   headerSubtitle: {
     fontSize: 14,
-    color: '#dabf7e',
+    color: THEME.accent,
     marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  headerTitle: { fontSize: 28, color: '#000', letterSpacing: -0.5 },
+  headerTitle: {
+    fontSize: 28,
+    color: THEME.text,
+    letterSpacing: -0.5
+  },
 
   formCard: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.white,
     marginHorizontal: 20,
     borderRadius: 20,
     padding: 16,
@@ -991,13 +1688,29 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
-  inputRow: { flexDirection: 'row', alignItems: 'center' },
-  iconWrap: { width: 32, alignItems: 'center' },
-  input: { flex: 1, fontSize: 15, color: '#000', paddingVertical: 12 },
-  formDivider: { height: 1, backgroundColor: '#f0f0f0', marginVertical: 4, marginLeft: 32 },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  iconWrap: {
+    width: 32,
+    alignItems: 'center'
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: THEME.text,
+    paddingVertical: 12
+  },
+  formDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 4,
+    marginLeft: 32
+  },
 
   suggestionsBox: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.white,
     borderWidth: 1,
     borderColor: '#eee',
     borderRadius: 12,
@@ -1012,8 +1725,15 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f5f5f5',
   },
-  suggName: { fontSize: 14, color: '#000' },
-  suggDesc: { fontSize: 12, color: '#888', marginTop: 2 },
+  suggName: {
+    fontSize: 14,
+    color: THEME.text
+  },
+  suggDesc: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2
+  },
 
   filterInnerTitleRow: {
     flexDirection: 'row',
@@ -1022,23 +1742,49 @@ const s = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 4,
   },
-  filterInnerTitle: { fontSize: 14, color: '#000' },
-  showMoreBtn: { flexDirection: 'row', alignItems: 'center' },
-  showMoreText: { fontSize: 12, color: '#305c5d' },
-  filterGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 12 },
+  filterInnerTitle: {
+    fontSize: 14,
+    color: THEME.text
+  },
+  showMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  showMoreText: {
+    fontSize: 12,
+    color: THEME.primary
+  },
+  filterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12
+  },
   filterChip: {
     borderRadius: 16,
-    backgroundColor: '#fbf6f4',
+    backgroundColor: THEME.card,
     borderWidth: 1,
     borderColor: '#eee',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
   },
-  filterChipImg: { width: '100%', height: 45, marginBottom: 4 },
-  filterChipActive: { backgroundColor: '#305c5d', borderColor: '#305c5d' },
-  filterChipText: { fontSize: 12, color: '#666', textAlign: 'center' },
-  filterChipTextActive: { color: '#dabf7e' },
+  filterChipImg: {
+    width: '100%',
+    height: 45,
+    marginBottom: 4
+  },
+  filterChipActive: {
+    backgroundColor: THEME.primary,
+    borderColor: THEME.primary
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center'
+  },
+  filterChipTextActive: {
+    color: THEME.accent
+  },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -1047,55 +1793,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 18, color: '#000' },
-  sectionCount: { fontSize: 14, color: '#888' },
-  viewAllLink: { fontSize: 14, color: '#dabf7e', marginRight: 20 },
+  sectionTitle: {
+    fontSize: 18,
+    color: THEME.text
+  },
+  sectionCount: {
+    fontSize: 14,
+    color: '#888'
+  },
+  viewAllLink: {
+    fontSize: 14,
+    color: THEME.accent,
+    marginRight: 20
+  },
 
-  listRow: { justifyContent: 'space-between', paddingHorizontal: 20, gap: 16 },
-
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
+  listRow: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    gap: 12
   },
-  cardImageContainer: {
-    width: '100%',
-    aspectRatio: 1.66,
-    backgroundColor: '#fbf6f4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 8,
-    position: 'relative',
-  },
-  cardImage: { width: '100%', height: '100%' },
-  cardPriceTag: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: '#305c5d',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  cardPriceText: { color: '#dabf7e', fontSize: 11 },
-  cardInfo: { padding: 10 },
-  cardName: { fontSize: 14, color: '#000', marginBottom: 4 },
-  cardMetaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  cardRatingBox: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  cardRatingText: { fontSize: 11, color: '#666' },
-  cardDriverName: { fontSize: 11, color: '#888', marginLeft: 4, flex: 1 },
-  cardTags: { flexDirection: 'row', gap: 4 },
-  smallTag: {
-    backgroundColor: 'rgba(218, 191, 126, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  smallTagText: { fontSize: 9, fontFamily: 'medium', color: '#305c5d' },
 
   rentalContainer: {
     marginTop: 20,
@@ -1103,174 +1819,28 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  rentalListContent: { paddingLeft: 20, paddingRight: 8, gap: 16 },
-  rentalCard: {
-    width: 200,
-    backgroundColor: '#fbf6f4',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#fff',
-    marginRight: 16,
+  rentalListContent: {
+    paddingLeft: 20,
+    paddingRight: 8,
+    gap: 16
   },
-  rentalImg: { width: '100%', height: 120, backgroundColor: '#ede6df' },
-  rentalBody: { padding: 12 },
-  rentalName: { fontSize: 16, color: '#000', marginBottom: 4 },
-  rentalProp: { fontSize: 13, color: '#666', marginBottom: 12 },
-  rentalFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rentalPrice: { fontSize: 14, color: '#305c5d' },
-  rentBtn: { backgroundColor: '#dabf7e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  rentBtnText: { color: '#fff', fontSize: 12 },
-  noRentalsText: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 14 },
-
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyStateText: { marginTop: 12, fontSize: 15, color: '#888' },
-
-  // Skeletons - Exact match to card
-  skeletonPulse: {
-    backgroundColor: '#e6dfd8',
-    overflow: 'hidden',
-  },
-  skeletonLine: { borderRadius: 6 },
-  skeletonBtn: { borderRadius: 4 },
-
-  // Bottom Sheet - Compact UX
-  sheetContent: {
-    padding: 16,
-    paddingBottom: 20,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12
-  },
-  sheetTitle: { fontSize: 18, color: '#000' },
-  sheetCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Sticky footer for button
-  sheetFooter: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 30,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-
-  journeySummary: {
-    backgroundColor: '#fbf6f4',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 12
-  },
-  journeyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  journeyText: { fontSize: 13, color: '#000', flex: 1 },
-  journeyLine: { width: 1, height: 10, backgroundColor: '#ccc', marginLeft: 7.5, marginVertical: 2 },
-  journeyMeta: { marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
-  journeyMetaText: { fontSize: 12, color: '#666' },
-
-  sheetCabReview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  sheetCabImgWrap: {
-    width: 60,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#fbf6f4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sheetCabImg: { width: '100%', height: '100%' },
-  sheetCabName: { fontSize: 14, color: '#000' },
-
-  // Horizontal fare layout
-  fareBoxHorizontal: {
-    flexDirection: 'row',
-    backgroundColor: '#fbf6f4',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  fareCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  fareDividerVertical: {
-    width: 1,
-    height: 30,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    marginHorizontal: 8,
-  },
-  fareLabel: { fontSize: 12, color: '#666' },
-  fareVal: { fontSize: 12, color: '#000' },
-  fareValTotal: { fontSize: 18, color: '#305c5d' },
-
-  formSectionTitle: {
-    fontSize: 12,
+  noRentalsText: {
+    textAlign: 'center',
     color: '#888',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sheetFormGroup: { marginBottom: 8, gap: 8 },
-  sheetInput: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#000',
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  sheetInputMulti: {
-    paddingTop: 12,
-    textAlignVertical: 'top',
+    marginTop: 20,
+    fontSize: 14
   },
 
-  // Phone input with fixed height wrapper
-  phoneInputWrapper: {
-    flexDirection: 'row',
+  emptyState: {
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    minHeight: 44,
-    overflow: 'hidden',
+    justifyContent: 'center',
+    paddingVertical: 60
   },
-  sheetInputPhone: {
-    flex: 1,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#000',
-    backgroundColor: 'transparent',
+  emptyStateText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: '#888'
   },
-
-  confirmBtn: {
-    backgroundColor: '#305c5d',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  confirmBtnText: { color: '#fff', fontSize: 15 },
 
   globalLoader: {
     position: 'absolute',
@@ -1283,54 +1853,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     zIndex: 9999,
   },
-  loaderText: { marginTop: 20, fontSize: 16, color: '#305c5d', letterSpacing: 0.5 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  modalClose: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  modalTitleText: { fontSize: 20, color: '#000', marginBottom: 12, textAlign: 'center' },
-  modalText: {
+  loaderText: {
+    marginTop: 20,
     fontSize: 16,
-    color: '#333',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
+    letterSpacing: 0.5
   },
-  modalBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
-  modalBtnText: { color: '#fff', fontSize: 16 },
-  modalBtnCancel: { backgroundColor: '#f5f5f5', borderWidth: 1, borderColor: '#e0e0e0' },
 });
